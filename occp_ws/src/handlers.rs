@@ -23,6 +23,11 @@ pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
                 handle_ocpp_messages(text, &mut socket).await;
             }
             AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
+            AxumWSMessage::Ping(payload) => {
+                // Reply with a Pong frame carrying the same payload
+                let _ = socket.send(AxumWSMessage::Pong(payload)).await;
+            }
+            AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
             AxumWSMessage::Close(_) => info!("WebSocket connection closed"),
             _ => (),
         }
