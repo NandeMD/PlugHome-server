@@ -16,24 +16,34 @@ use crate::types::*;
 pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
     info!(addr = %addr, "New WebSocket connection: {addr}");
 
-    while let Some(Ok(msg)) = socket.next().await {
-        match msg {
-            AxumWSMessage::Text(text) => {
-                let message = text.clone();
-                info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {message}\n\tAddr: {addr}\n");
-                handle_ocpp_messages(text, &mut socket).await;
-            }
-            AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
-            AxumWSMessage::Ping(payload) => {
-                // Reply with a Pong frame carrying the same payload
-                let _ = socket.send(AxumWSMessage::Pong(payload)).await;
-            }
-            AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
-            AxumWSMessage::Close(_) => {
-                info!("WebSocket connection closed");
-                if let Err(err) = socket.close().await {
-                    warn!("Failed to close WebSocket connection: {err}");
+    loop {
+        match socket.next().await {
+            Some(Ok(msg)) => match msg {
+                AxumWSMessage::Text(text) => {
+                    let message = text.clone();
+                    info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {message}\n\tAddr: {addr}\n");
+                    handle_ocpp_messages(text, &mut socket).await;
                 }
+                AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
+                AxumWSMessage::Ping(payload) => {
+                    // Reply with a Pong frame carrying the same payload
+                    let _ = socket.send(AxumWSMessage::Pong(payload)).await;
+                }
+                AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
+                AxumWSMessage::Close(_) => {
+                    info!("WebSocket connection closed");
+                    if let Err(err) = socket.close().await {
+                        warn!("Failed to close WebSocket connection: {err}");
+                    }
+                    break;
+                }
+            },
+            Some(Err(err)) => {
+                warn!(addr = %addr, "WebSocket stream error: {err}");
+                break;
+            }
+            None => {
+                info!(addr = %addr, "WebSocket stream disconnected");
                 break;
             }
         }
