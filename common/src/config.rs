@@ -36,3 +36,24 @@ impl ServerConfig {
         format!("{}:{}", self.addr, self.port)
     }
 }
+
+/// List of allowed charger serial numbers parsed from `ALLOWED_SERIAL_NUMBERS`.
+/// Comma-separated; empty or missing disables the check.
+pub fn allowed_serial_numbers() -> Result<Vec<String>> {
+    let raw = env::var("ALLOWED_SERIAL_NUMBERS").unwrap_or_default();
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let serials = raw
+        .split(',')
+        .filter_map(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+    Ok(serials)
+}

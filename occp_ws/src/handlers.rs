@@ -11,6 +11,7 @@ use rust_ocpp::v1_6::messages::{
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
+use crate::state::load_allowed_serial_numbers;
 use crate::types::*;
 
 pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
@@ -22,7 +23,10 @@ pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
                 AxumWSMessage::Text(text) => {
                     let message = text.clone();
                     info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {message}\n\tAddr: {addr}\n");
-                    handle_ocpp_messages(text, &mut socket).await;
+                    let should_continue = handle_ocpp_messages(text, &mut socket).await;
+                    if !should_continue {
+                        break;
+                    }
                 }
                 AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
                 AxumWSMessage::Ping(payload) => {
@@ -50,7 +54,7 @@ pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
     }
 }
 
-async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
+async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
     match serde_json::from_str(&message) {
         Ok(ocpp_message) => match ocpp_message {
             OcppMessageType::Call(message_type_id, message_id, action, payload) => {
@@ -70,13 +74,14 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
                             socket,
                         )
                         .await;
-                        return;
+                        return true;
                     }
                 };
-                handle_ocpp_call(message_type_id, message_id, action, payload, socket).await;
+                handle_ocpp_call(message_type_id, message_id, action, payload, socket).await
             }
             OcppMessageType::CallResult(message_type_id, message_id, payload) => {
                 handle_ocpp_call_result(message_type_id, message_id, payload, socket).await;
+                true
             }
             OcppMessageType::CallError(
                 message_type_id,
@@ -94,9 +99,13 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
                     socket,
                 )
                 .await;
+                true
             }
         },
-        Err(err) => warn!("Failed to parse OCPP message: {err:?}"),
+        Err(err) => {
+            warn!("Failed to parse OCPP message: {err:?}");
+            true
+        }
     }
 }
 
@@ -106,12 +115,12 @@ async fn handle_ocpp_call(
     action: OcppActionEnum,
     payload: serde_json::Value,
     socket: &mut WebSocket,
-) {
+) -> bool {
     let payload = match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => ocpp_payload,
         Err(err) => {
             error!("Failed to parse OCPP Payload: {err:?}");
-            return;
+            return true;
         }
     };
 
@@ -145,13 +154,24 @@ async fn handle_ocpp_call(
                     Err(err) => warn!("Failed to serialize Authorize response: {err}"),
                 }
             }
+            true
         }
         BootNotification => {
             if let OcppPayload::BootNotification(BootNotificationKind::Request(boot_notification)) =
                 payload
             {
-                if boot_notification.charge_point_serial_number == Some("NKYK430037668".to_string())
-                {
+                let allowed_serials = load_allowed_serial_numbers().await;
+                let serial = boot_notification.charge_point_serial_number.clone();
+                let serial_is_allowed = if allowed_serials.is_empty() {
+                    true
+                } else {
+                    serial
+                        .as_ref()
+                        .map(|s| allowed_serials.iter().any(|allowed| allowed == s))
+                        .unwrap_or(false)
+                };
+
+                if serial_is_allowed {
                     info!("CALL REQUEST:\n{boot_notification:#?}");
                     let response = OcppCallResult {
                         message_type_id: 3,
@@ -176,19 +196,25 @@ async fn handle_ocpp_call(
                         }
                         Err(err) => warn!("Failed to serialize BootNotification response: {err}"),
                     }
+                    true
                 } else {
                     error!(
                         "Invalid Charger Serial Number. BootNotification: \
                              {boot_notification:?}"
                     );
+                    if let Err(err) = socket.send(axum::extract::ws::Message::Close(None)).await {
+                        warn!("Failed to send close frame: {err}");
+                    }
+                    false
                 }
             } else {
                 error!("Invalid OCPP BootNotification payload");
+                true
             }
         }
-        ChangeAvailability => {}
-        ChangeConfiguration => {}
-        ClearCache => {}
+        ChangeAvailability => true,
+        ChangeConfiguration => true,
+        ClearCache => true,
         DataTransfer => {
             if let OcppPayload::DataTransfer(DataTransferKind::Request(data_transfer)) = payload {
                 info!("CALL REQUEST:\n{data_transfer:#?}");
@@ -215,8 +241,9 @@ async fn handle_ocpp_call(
                     Err(err) => warn!("Failed to serialize DataTransfer response: {err}"),
                 }
             }
+            true
         }
-        GetConfiguration => {}
+        GetConfiguration => true,
         Heartbeat => {
             if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = payload {
                 info!("CALL REQUEST:\n{heartbeat:#?}");
@@ -240,11 +267,12 @@ async fn handle_ocpp_call(
                     Err(err) => warn!("Failed to serialize Heartbeat response: {err}"),
                 }
             }
+            true
         }
-        MeterValues => {}
-        RemoteStartTransaction => {}
-        RemoteStopTransaction => {}
-        Reset => {}
+        MeterValues => true,
+        RemoteStartTransaction => true,
+        RemoteStopTransaction => true,
+        Reset => true,
         StatusNotification => {
             if let OcppPayload::StatusNotification(StatusNotificationKind::Request(
                 status_notification,
@@ -252,8 +280,9 @@ async fn handle_ocpp_call(
             {
                 info!("CALL REQUEST:\n{status_notification:#?}");
             }
+            true
         }
-        StartTransaction => {}
+        StartTransaction => true,
         StopTransaction => {
             if let OcppPayload::StopTransaction(StopTransactionKind::Request(stop_transaction)) =
                 payload
@@ -285,8 +314,9 @@ async fn handle_ocpp_call(
                     Err(err) => warn!("Failed to serialize StopTransaction response: {err}"),
                 }
             }
+            true
         }
-        UnlockConnector => {}
+        UnlockConnector => true,
     }
 }
 
