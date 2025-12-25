@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use tokio::sync::OnceCell;
 
-pub static TIME_NOW: OnceCell<String> = OnceCell::const_new();
+pub static START_TIME: OnceCell<DateTime<Utc>> = OnceCell::const_new();

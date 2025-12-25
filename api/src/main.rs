@@ -2,20 +2,19 @@ use std::{env, net::SocketAddr, panic};
 
 use anyhow::{Context, Result};
 use axum::{Router, routing::get};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use tokio::net;
 use tracing::{Level, info};
 
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
-use occp_ws::state::TIME_NOW;
+use occp_ws::state::START_TIME;
 
 async fn run() -> Result<()> {
-    async fn time_now() -> String {
-        let date_time = Utc::now();
-        format!("{}", date_time.format("%d/%m/%Y %H:%M"))
+    async fn time_now() -> DateTime<Utc> {
+        Utc::now()
     }
-    let _time_now = TIME_NOW.get_or_init(time_now).await;
+    let _time_now = START_TIME.get_or_init(time_now).await;
 
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
