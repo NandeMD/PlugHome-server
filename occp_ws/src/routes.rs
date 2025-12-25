@@ -5,14 +5,13 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::TypedHeader;
-use tracing::{info, warn};
 
 use crate::handlers::handle_socket;
 use crate::state::START_TIME;
 
 pub async fn upgrade_to_ws(
     ws: WebSocketUpgrade,
-    user_agent: Option<TypedHeader<headers::UserAgent>>,
+    _user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, addr))

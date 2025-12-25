@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use rust_ocpp::v1_6::messages::{
     authorize::{AuthorizeRequest, AuthorizeResponse},
     boot_notification::{BootNotificationRequest, BootNotificationResponse},
@@ -18,7 +16,7 @@ use rust_ocpp::v1_6::messages::{
     stop_transaction::{StopTransactionRequest, StopTransactionResponse},
     unlock_connector::{UnlockConnectorRequest, UnlockConnectorResponse},
 };
-use strum_macros::Display;
+use strum_macros::{Display, EnumString};
 
 pub type OcppMessageTypeId = usize;
 pub type OcppMessageId = String;
@@ -26,7 +24,7 @@ pub type OcppErrorCode = String;
 pub type OcppErrorDescription = String;
 pub type OcppErrorDetails = serde_json::Value;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, EnumString)]
 #[serde(untagged)]
 pub enum OcppActionEnum {
     // OCPP 1.6 JSON
@@ -47,32 +45,6 @@ pub enum OcppActionEnum {
     StartTransaction,
     StopTransaction,
     UnlockConnector,
-}
-
-impl FromStr for OcppActionEnum {
-    type Err = String;
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        match str {
-            "Authorize" => Ok(Self::Authorize),
-            "BootNotification" => Ok(Self::BootNotification),
-            "ChangeAvailability" => Ok(Self::ChangeAvailability),
-            "ChangeConfiguration" => Ok(Self::ChangeConfiguration),
-            "ClearCache" => Ok(Self::ClearCache),
-            "DataTransfer" => Ok(Self::DataTransfer),
-            "GetConfiguration" => Ok(Self::GetConfiguration),
-            "Heartbeat" => Ok(Self::Heartbeat),
-            "MeterValues" => Ok(Self::MeterValues),
-            "RemoteStartTransaction" => Ok(Self::RemoteStartTransaction),
-            "RemoteStopTransaction" => Ok(Self::RemoteStopTransaction),
-            "Reset" => Ok(Self::Reset),
-            "StatusNotification" => Ok(Self::StatusNotification),
-            "StartTransaction" => Ok(Self::StartTransaction),
-            "StopTransaction" => Ok(Self::StopTransaction),
-            "UnlockConnector" => Ok(Self::UnlockConnector),
-            _ => Err(format!("Unknown OCPP action: {str}")),
-        }
-    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Display)]
@@ -192,22 +164,22 @@ pub enum UnlockConnectorKind {
 pub enum OcppPayload {
     // OCPP 1.6 JSON
     // Core
-    Authorize(AuthorizeKind), // Charger -> Server
-    BootNotification(BootNotificationKind), // Charger -> Server
-    ChangeAvailability(ChangeAvailabilityKind), // Server -> Charger
-    ChangeConfiguration(ChangeConfigurationKind), // Server -> Charger
-    ClearCache(ClearCacheKind), // Server -> Charger
-    DataTransfer(DataTransferKind), // Both directions
-    GetConfiguration(GetConfigurationKind), // Server -> Charger
-    Heartbeat(HeartbeatKind), // Charger -> Server
-    MeterValues(MeterValuesKind), // Charger -> Server
+    Authorize(AuthorizeKind),                           // Charger -> Server
+    BootNotification(BootNotificationKind),             // Charger -> Server
+    ChangeAvailability(ChangeAvailabilityKind),         // Server -> Charger
+    ChangeConfiguration(ChangeConfigurationKind),       // Server -> Charger
+    ClearCache(ClearCacheKind),                         // Server -> Charger
+    DataTransfer(DataTransferKind),                     // Both directions
+    GetConfiguration(GetConfigurationKind),             // Server -> Charger
+    Heartbeat(HeartbeatKind),                           // Charger -> Server
+    MeterValues(MeterValuesKind),                       // Charger -> Server
     RemoteStartTransaction(RemoteStartTransactionKind), // Server -> Charger
-    RemoteStopTransaction(RemoteStopTransactionKind), // Server -> Charger
-    Reset(ResetKind), // Server -> Charger
-    StartTransaction(StartTransactionKind), // Charger -> Server
-    StatusNotification(StatusNotificationKind), // Charger -> Server
-    StopTransaction(StopTransactionKind), // Charger -> Server
-    UnlockConnector(UnlockConnectorKind), // Server -> Charger
+    RemoteStopTransaction(RemoteStopTransactionKind),   // Server -> Charger
+    Reset(ResetKind),                                   // Server -> Charger
+    StartTransaction(StartTransactionKind),             // Charger -> Server
+    StatusNotification(StatusNotificationKind),         // Charger -> Server
+    StopTransaction(StopTransactionKind),               // Charger -> Server
+    UnlockConnector(UnlockConnectorKind),               // Server -> Charger
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
