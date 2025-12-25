@@ -5,6 +5,7 @@ use axum::{Router, routing::get};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use tokio::net;
+use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -39,7 +40,8 @@ async fn run() -> Result<()> {
 
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
-        .route("/", get(healthcheck_route));
+        .route("/", get(healthcheck_route))
+        .layer(TraceLayer::new_for_http());
 
     axum::serve(
         tcp_listener,
