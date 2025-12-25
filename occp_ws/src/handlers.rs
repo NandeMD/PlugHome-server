@@ -28,8 +28,13 @@ pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
                 let _ = socket.send(AxumWSMessage::Pong(payload)).await;
             }
             AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
-            AxumWSMessage::Close(_) => info!("WebSocket connection closed"),
-            _ => (),
+            AxumWSMessage::Close(_) => {
+                info!("WebSocket connection closed");
+                if let Err(err) = socket.close().await {
+                    warn!("Failed to close WebSocket connection: {err}");
+                }
+                break;
+            }
         }
     }
 }
