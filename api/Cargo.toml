@@ -7,7 +7,7 @@ edition = "2024"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 axum = { version = "0.7.5", features = ["ws", "macros"] }
 chrono = "0.4.38"
-dotenvy_macro = "0.15.7"
+dotenvy = "0.15.7"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 occp_ws = { path = "../occp_ws" }

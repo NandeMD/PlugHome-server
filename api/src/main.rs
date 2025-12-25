@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, panic};
+use std::{env, net::SocketAddr, panic};
 
 use axum::{Router, routing::get};
 use chrono::Utc;
-use dotenvy_macro::dotenv;
+use dotenvy::dotenv;
 use tokio::net;
 use tracing::{Level, info};
 
@@ -25,12 +25,14 @@ async fn run() {
         tracing::error!("\n\nPanic: {err:#?}\n\n");
     }));
 
-    const ADDR: &str = dotenv!("ADDR");
-    const PORT: &str = dotenv!("PORT");
-    let tcp_listener = net::TcpListener::bind(format!("{ADDR}:{PORT}"))
+    dotenv().ok();
+
+    let addr = env::var("ADDR").expect("ADDR must be set");
+    let port = env::var("PORT").expect("PORT must be set");
+    let tcp_listener = net::TcpListener::bind(format!("{addr}:{port}"))
         .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {ADDR}"));
-    info!("Server listening on {ADDR}:{PORT}");
+        .unwrap_or_else(|_| panic!("Failed to bind to address: {addr}"));
+    info!("Server listening on {addr}:{port}");
 
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
