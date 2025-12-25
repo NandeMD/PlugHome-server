@@ -1,7 +1,7 @@
 use rust_ocpp::v1_6::messages::{
     authorize::{AuthorizeRequest, AuthorizeResponse},
     boot_notification::{BootNotificationRequest, BootNotificationResponse},
-    change_availability::ChangeAvailabilityRequest,
+    change_availability::{ChangeAvailabilityRequest, ChangeAvailabilityResponse},
     change_configuration::{ChangeConfigurationRequest, ChangeConfigurationResponse},
     clear_cache::{ClearCacheRequest, ClearCacheResponse},
     data_transfer::{DataTransferRequest, DataTransferResponse},
@@ -65,7 +65,7 @@ pub enum BootNotificationKind {
 #[serde(untagged)]
 pub enum ChangeAvailabilityKind {
     Request(ChangeAvailabilityRequest),
-    Response(ChangeAvailabilityRequest),
+    Response(ChangeAvailabilityResponse),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Display)]
