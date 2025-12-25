@@ -15,17 +15,6 @@ pub async fn upgrade_to_ws(
     user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
-    match user_agent {
-        Some(TypedHeader(agent)) => {
-            if agent.as_str() == "Websocket Client" {
-                info!("{agent} user agent is a valid client");
-            } else {
-                warn!("User agent {agent} is not a valid Websocket Client");
-            }
-        }
-        None => warn!("User agent is not present. Continue without specific platform check"),
-    }
-
     ws.on_upgrade(move |socket| handle_socket(socket, addr))
 }
 
