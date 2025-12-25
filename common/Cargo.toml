@@ -1,0 +1,9 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenvy = "0.15.7"
+anyhow = "1"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

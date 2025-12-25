@@ -7,9 +7,8 @@ edition = "2024"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 axum = { version = "0.7.5", features = ["ws", "macros"] }
 chrono = "0.4.38"
-dotenvy = "0.15.7"
 anyhow = "1"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tower-http = { version = "0.5", features = ["trace"] }
 occp_ws = { path = "../occp_ws" }
+common = { path = "../common" }

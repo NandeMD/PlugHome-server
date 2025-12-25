@@ -33,12 +33,11 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
- "dotenvy",
+ "common",
  "occp_ws",
  "tokio",
  "tower-http",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -225,6 +224,15 @@ dependencies = [
  "serde",
  "wasm-bindgen",
  "windows-link",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dotenvy",
+ "tracing-subscriber",
 ]
 
 [[package]]
