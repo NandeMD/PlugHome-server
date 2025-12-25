@@ -8,6 +8,7 @@ use rust_ocpp::v1_6::messages::{
     data_transfer::DataTransferResponse, heart_beat::HeartbeatResponse,
     stop_transaction::StopTransactionResponse,
 };
+use serde_json::json;
 use tracing::{debug, error, info, warn};
 
 use crate::types::*;
@@ -50,6 +51,15 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
                     }
                     Err(err) => {
                         error!("Failed to parse OCPP Call Action: {err:?}");
+                        handle_ocpp_call_error(
+                            4,
+                            message_id,
+                            "NotSupported".to_string(),
+                            format!("Unknown action: {action}"),
+                            json!({ "action": action, "reason": err.to_string() }),
+                            socket,
+                        )
+                        .await;
                         return;
                     }
                 };
