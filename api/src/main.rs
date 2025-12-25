@@ -1,10 +1,10 @@
 use std::{net::SocketAddr, panic};
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use chrono::Utc;
 use dotenvy_macro::dotenv;
 use tokio::net;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
 use occp_ws::state::TIME_NOW;
@@ -29,7 +29,7 @@ async fn run() {
     const PORT: &str = dotenv!("PORT");
     let tcp_listener = net::TcpListener::bind(format!("{ADDR}:{PORT}"))
         .await
-        .expect(&format!("Failed to bind to address: {ADDR}"));
+        .unwrap_or_else(|_| panic!("Failed to bind to address: {ADDR}"));
     info!("Server listening on {ADDR}:{PORT}");
 
     let router = Router::new()

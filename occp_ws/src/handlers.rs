@@ -3,7 +3,11 @@ use std::{net::SocketAddr, str::FromStr};
 use axum::extract::ws::{Message as AxumWSMessage, WebSocket};
 use chrono::Utc;
 use futures::StreamExt;
-use rust_ocpp::v1_6::messages::{authorize::AuthorizeResponse, boot_notification::BootNotificationResponse, data_transfer::DataTransferResponse, heart_beat::HeartbeatResponse, stop_transaction::StopTransactionResponse};
+use rust_ocpp::v1_6::messages::{
+    authorize::AuthorizeResponse, boot_notification::BootNotificationResponse,
+    data_transfer::DataTransferResponse, heart_beat::HeartbeatResponse,
+    stop_transaction::StopTransactionResponse,
+};
 use tracing::{debug, error, info, warn};
 
 use crate::types::*;
@@ -17,7 +21,7 @@ pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
                 let message = text.clone();
                 info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {message}\n\tAddr: {addr}\n");
                 handle_ocpp_messages(text, &mut socket).await;
-            },
+            }
             AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
             AxumWSMessage::Close(_) => info!("WebSocket connection closed"),
             _ => (),
@@ -33,17 +37,17 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
                     Ok(action) => {
                         debug!("Parsed OCPP call action: {action:?}");
                         action
-                    },
+                    }
                     Err(err) => {
                         error!("Failed to parse OCPP Call Action: {err:?}");
                         return;
-                    },
+                    }
                 };
                 handle_ocpp_call(message_type_id, message_id, action, payload, socket).await;
-            },
+            }
             OcppMessageType::CallResult(message_type_id, message_id, payload) => {
                 handle_ocpp_call_result(message_type_id, message_id, payload, socket).await;
-            },
+            }
             OcppMessageType::CallError(
                 message_type_id,
                 message_id,
@@ -60,12 +64,9 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) {
                     socket,
                 )
                 .await;
-            },
+            }
         },
-        Err(err) => {
-            warn!("Failed to parse OCPP message: {err:?}");
-            return;
-        },
+        Err(err) => warn!("Failed to parse OCPP message: {err:?}"),
     }
 }
 
@@ -81,173 +82,151 @@ async fn handle_ocpp_call(
         Err(err) => {
             error!("Failed to parse OCPP Payload: {err:?}");
             return;
-        },
+        }
     };
 
     use OcppActionEnum::*;
 
     match action {
         Authorize => {
-            match payload {
-                OcppPayload::Authorize(AuthorizeKind::Request(authorize)) => {
-                    info!("CALL REQUEST:\n{authorize:#?}");
-                    let response = OcppCallResult {
-                        message_type_id: 3,
-                        message_id,
-                        payload: OcppPayload::Authorize(AuthorizeKind::Response(
-                            AuthorizeResponse {
-                                id_tag_info: rust_ocpp::v1_6::types::IdTagInfo {
-                                    status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
-                                    expiry_date: None,
-                                    parent_id_tag: None,
-                                },
-                            },
-                        )),
-                    };
-                    let response_json = serde_json::to_string(&response).unwrap();
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                        .unwrap();
-                },
-                _ => (),
+            if let OcppPayload::Authorize(AuthorizeKind::Request(authorize)) = payload {
+                info!("CALL REQUEST:\n{authorize:#?}");
+                let response = OcppCallResult {
+                    message_type_id: 3,
+                    message_id,
+                    payload: OcppPayload::Authorize(AuthorizeKind::Response(AuthorizeResponse {
+                        id_tag_info: rust_ocpp::v1_6::types::IdTagInfo {
+                            status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
+                            expiry_date: None,
+                            parent_id_tag: None,
+                        },
+                    })),
+                };
+                let response_json = serde_json::to_string(&response).unwrap();
+                info!("CALL RESULT RESPONSE:\n{response_json}");
+                socket
+                    .send(axum::extract::ws::Message::Text(response_json))
+                    .await
+                    .unwrap();
             }
-        },
+        }
         BootNotification => {
-            match payload {
-                OcppPayload::BootNotification(BootNotificationKind::Request(boot_notification)) => {
-                    if boot_notification.charge_point_serial_number == Some("NKYK430037668".to_string()) {
-                        info!("CALL REQUEST:\n{boot_notification:#?}");
-                        let response = OcppCallResult {
-                            message_type_id: 3,
-                            message_id,
-                            payload: OcppPayload::BootNotification(BootNotificationKind::Response(
-                                BootNotificationResponse {
-                                    status: rust_ocpp::v1_6::types::RegistrationStatus::Accepted,
-                                    current_time: Utc::now(),
-                                    interval: 300,
-                                },
-                            )),
-                        };
-                        let response_json = serde_json::to_string(&response).unwrap();
-                        info!("CALL RESULT RESPONSE:\n{response_json}");
-                        socket
-                            .send(axum::extract::ws::Message::Text(response_json))
-                            .await
-                            .unwrap();
-                    } else {
-                        error!(
-                            "Invalid Charger Serial Number. BootNotification: \
+            if let OcppPayload::BootNotification(BootNotificationKind::Request(boot_notification)) =
+                payload
+            {
+                if boot_notification.charge_point_serial_number == Some("NKYK430037668".to_string())
+                {
+                    info!("CALL REQUEST:\n{boot_notification:#?}");
+                    let response = OcppCallResult {
+                        message_type_id: 3,
+                        message_id,
+                        payload: OcppPayload::BootNotification(BootNotificationKind::Response(
+                            BootNotificationResponse {
+                                status: rust_ocpp::v1_6::types::RegistrationStatus::Accepted,
+                                current_time: Utc::now(),
+                                interval: 300,
+                            },
+                        )),
+                    };
+                    let response_json = serde_json::to_string(&response).unwrap();
+                    info!("CALL RESULT RESPONSE:\n{response_json}");
+                    socket
+                        .send(axum::extract::ws::Message::Text(response_json))
+                        .await
+                        .unwrap();
+                } else {
+                    error!(
+                        "Invalid Charger Serial Number. BootNotification: \
                              {boot_notification:?}"
-                        );
-                    }
-                },
-                _ => error!("Invalid OCPP BootNotification payload"),
+                    );
+                }
+            } else {
+                error!("Invalid OCPP BootNotification payload");
             }
-        },
-        ChangeAvailability => {
-        },
-        ChangeConfiguration => {
-        },
-        ClearCache => {
-        },
+        }
+        ChangeAvailability => {}
+        ChangeConfiguration => {}
+        ClearCache => {}
         DataTransfer => {
-            match payload {
-                OcppPayload::DataTransfer(DataTransferKind::Request(data_transfer)) => {
-                    info!("CALL REQUEST:\n{data_transfer:#?}");
-                    let response = OcppCallResult {
-                        message_type_id: 3,
-                        message_id,
-                        payload: OcppPayload::DataTransfer(DataTransferKind::Response(
-                            DataTransferResponse {
-                                status: rust_ocpp::v1_6::types::DataTransferStatus::Accepted,
-                                data: Some("Data Transfer Accepted".to_string()),
-                            },
-                        )),
-                    };
-                    let response_json = serde_json::to_string(&response).unwrap();
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                        .unwrap();
-                },
-                _ => (),
+            if let OcppPayload::DataTransfer(DataTransferKind::Request(data_transfer)) = payload {
+                info!("CALL REQUEST:\n{data_transfer:#?}");
+                let response = OcppCallResult {
+                    message_type_id: 3,
+                    message_id,
+                    payload: OcppPayload::DataTransfer(DataTransferKind::Response(
+                        DataTransferResponse {
+                            status: rust_ocpp::v1_6::types::DataTransferStatus::Accepted,
+                            data: Some("Data Transfer Accepted".to_string()),
+                        },
+                    )),
+                };
+                let response_json = serde_json::to_string(&response).unwrap();
+                info!("CALL RESULT RESPONSE:\n{response_json}");
+                socket
+                    .send(axum::extract::ws::Message::Text(response_json))
+                    .await
+                    .unwrap();
             }
-        },
-        GetConfiguration => {
-        },
+        }
+        GetConfiguration => {}
         Heartbeat => {
-            match payload {
-                OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) => {
-                    info!("CALL REQUEST:\n{heartbeat:#?}");
-                    let response = OcppCallResult {
-                        message_type_id: 3,
-                        message_id,
-                        payload: OcppPayload::Heartbeat(HeartbeatKind::Response(
-                            HeartbeatResponse { current_time: Utc::now() },
-                        )),
-                    };
-                    let response_json = serde_json::to_string(&response).unwrap();
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                        .unwrap();
-                },
-                _ => (),
+            if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = payload {
+                info!("CALL REQUEST:\n{heartbeat:#?}");
+                let response = OcppCallResult {
+                    message_type_id: 3,
+                    message_id,
+                    payload: OcppPayload::Heartbeat(HeartbeatKind::Response(HeartbeatResponse {
+                        current_time: Utc::now(),
+                    })),
+                };
+                let response_json = serde_json::to_string(&response).unwrap();
+                info!("CALL RESULT RESPONSE:\n{response_json}");
+                socket
+                    .send(axum::extract::ws::Message::Text(response_json))
+                    .await
+                    .unwrap();
             }
-        },
-        MeterValues => {
-        },
-        RemoteStartTransaction => {
-        },
-        RemoteStopTransaction => {
-        },
-        Reset => {
-        },
+        }
+        MeterValues => {}
+        RemoteStartTransaction => {}
+        RemoteStopTransaction => {}
+        Reset => {}
         StatusNotification => {
-            match payload {
-                OcppPayload::StatusNotification(StatusNotificationKind::Request(
-                    status_notification,
-                )) => {
-                    info!("CALL REQUEST:\n{status_notification:#?}");
-                },
-                _ => (),
+            if let OcppPayload::StatusNotification(StatusNotificationKind::Request(
+                status_notification,
+            )) = payload
+            {
+                info!("CALL REQUEST:\n{status_notification:#?}");
             }
-        },
-        StartTransaction => {
-        },
+        }
+        StartTransaction => {}
         StopTransaction => {
-            match payload {
-                OcppPayload::StopTransaction(StopTransactionKind::Request(stop_transaction)) => {
-                    info!("CALL REQUEST:\n{stop_transaction:#?}");
-                    let response = OcppCallResult {
-                        message_type_id: 3,
-                        message_id,
-                        payload: OcppPayload::StopTransaction(StopTransactionKind::Response(
-                            StopTransactionResponse {
-                                id_tag_info: Some(rust_ocpp::v1_6::types::IdTagInfo {
-                                    status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
-                                    expiry_date: None,
-                                    parent_id_tag: None,
-                                }),
-                            },
-                        )),
-                    };
-                    let response_json = serde_json::to_string(&response).unwrap();
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                        .unwrap();
-                },
-                _ => (),
+            if let OcppPayload::StopTransaction(StopTransactionKind::Request(stop_transaction)) =
+                payload
+            {
+                info!("CALL REQUEST:\n{stop_transaction:#?}");
+                let response = OcppCallResult {
+                    message_type_id: 3,
+                    message_id,
+                    payload: OcppPayload::StopTransaction(StopTransactionKind::Response(
+                        StopTransactionResponse {
+                            id_tag_info: Some(rust_ocpp::v1_6::types::IdTagInfo {
+                                status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
+                                expiry_date: None,
+                                parent_id_tag: None,
+                            }),
+                        },
+                    )),
+                };
+                let response_json = serde_json::to_string(&response).unwrap();
+                info!("CALL RESULT RESPONSE:\n{response_json}");
+                socket
+                    .send(axum::extract::ws::Message::Text(response_json))
+                    .await
+                    .unwrap();
             }
-        },
-        UnlockConnector => {
-        },
+        }
+        UnlockConnector => {}
     }
 }
 
@@ -260,10 +239,10 @@ async fn handle_ocpp_call_result(
     match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => {
             info!("Parsed OCPP Payload: {ocpp_payload:?}");
-        },
+        }
         Err(err) => {
             warn!("Failed to parse OCPP Payload: {err:?}");
-        },
+        }
     }
 }
 

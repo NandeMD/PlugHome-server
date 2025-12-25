@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{ws::WebSocketUpgrade, ConnectInfo},
+    extract::{ConnectInfo, ws::WebSocketUpgrade},
     response::IntoResponse,
 };
 use axum_extra::TypedHeader;
@@ -22,7 +22,7 @@ pub async fn upgrade_to_ws(
             } else {
                 warn!("User agent {agent} is not a valid Websocket Client");
             }
-        },
+        }
         None => warn!("User agent is not present. Continue without specific platform check"),
     }
 
@@ -31,8 +31,22 @@ pub async fn upgrade_to_ws(
 
 pub async fn healthcheck_route() -> impl IntoResponse {
     if let Some(time) = TIME_NOW.get() {
-        axum::response::Html::from(format!("<h1>Server working. Started at: {time}</h1>"))
+        (
+            axum::http::StatusCode::OK,
+            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+            axum::Json(serde_json::json!({
+                "status": "ok",
+                "started_at": time,
+            })),
+        )
     } else {
-        axum::response::Html::from(format!("<h1>Server has not started yet</h1>"))
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            [(axum::http::header::CACHE_CONTROL, "no-store")],
+            axum::Json(serde_json::json!({
+                "status": "unavailable",
+                "message": "Server has not started yet",
+            })),
+        )
     }
 }
