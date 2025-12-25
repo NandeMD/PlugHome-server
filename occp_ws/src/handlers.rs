@@ -122,12 +122,18 @@ async fn handle_ocpp_call(
                         },
                     })),
                 };
-                let response_json = serde_json::to_string(&response).unwrap();
-                info!("CALL RESULT RESPONSE:\n{response_json}");
-                socket
-                    .send(axum::extract::ws::Message::Text(response_json))
-                    .await
-                    .unwrap();
+                match serde_json::to_string(&response) {
+                    Ok(response_json) => {
+                        info!("CALL RESULT RESPONSE:\n{response_json}");
+                        if let Err(err) = socket
+                            .send(axum::extract::ws::Message::Text(response_json))
+                            .await
+                        {
+                            warn!("Failed to send Authorize response: {err}");
+                        }
+                    }
+                    Err(err) => warn!("Failed to serialize Authorize response: {err}"),
+                }
             }
         }
         BootNotification => {
@@ -148,12 +154,18 @@ async fn handle_ocpp_call(
                             },
                         )),
                     };
-                    let response_json = serde_json::to_string(&response).unwrap();
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                        .unwrap();
+                    match serde_json::to_string(&response) {
+                        Ok(response_json) => {
+                            info!("CALL RESULT RESPONSE:\n{response_json}");
+                            if let Err(err) = socket
+                                .send(axum::extract::ws::Message::Text(response_json))
+                                .await
+                            {
+                                warn!("Failed to send BootNotification response: {err}");
+                            }
+                        }
+                        Err(err) => warn!("Failed to serialize BootNotification response: {err}"),
+                    }
                 } else {
                     error!(
                         "Invalid Charger Serial Number. BootNotification: \
@@ -180,12 +192,18 @@ async fn handle_ocpp_call(
                         },
                     )),
                 };
-                let response_json = serde_json::to_string(&response).unwrap();
-                info!("CALL RESULT RESPONSE:\n{response_json}");
-                socket
-                    .send(axum::extract::ws::Message::Text(response_json))
-                    .await
-                    .unwrap();
+                match serde_json::to_string(&response) {
+                    Ok(response_json) => {
+                        info!("CALL RESULT RESPONSE:\n{response_json}");
+                        if let Err(err) = socket
+                            .send(axum::extract::ws::Message::Text(response_json))
+                            .await
+                        {
+                            warn!("Failed to send DataTransfer response: {err}");
+                        }
+                    }
+                    Err(err) => warn!("Failed to serialize DataTransfer response: {err}"),
+                }
             }
         }
         GetConfiguration => {}
@@ -199,12 +217,18 @@ async fn handle_ocpp_call(
                         current_time: Utc::now(),
                     })),
                 };
-                let response_json = serde_json::to_string(&response).unwrap();
-                info!("CALL RESULT RESPONSE:\n{response_json}");
-                socket
-                    .send(axum::extract::ws::Message::Text(response_json))
-                    .await
-                    .unwrap();
+                match serde_json::to_string(&response) {
+                    Ok(response_json) => {
+                        info!("CALL RESULT RESPONSE:\n{response_json}");
+                        if let Err(err) = socket
+                            .send(axum::extract::ws::Message::Text(response_json))
+                            .await
+                        {
+                            warn!("Failed to send Heartbeat response: {err}");
+                        }
+                    }
+                    Err(err) => warn!("Failed to serialize Heartbeat response: {err}"),
+                }
             }
         }
         MeterValues => {}
@@ -238,12 +262,18 @@ async fn handle_ocpp_call(
                         },
                     )),
                 };
-                let response_json = serde_json::to_string(&response).unwrap();
-                info!("CALL RESULT RESPONSE:\n{response_json}");
-                socket
-                    .send(axum::extract::ws::Message::Text(response_json))
-                    .await
-                    .unwrap();
+                match serde_json::to_string(&response) {
+                    Ok(response_json) => {
+                        info!("CALL RESULT RESPONSE:\n{response_json}");
+                        if let Err(err) = socket
+                            .send(axum::extract::ws::Message::Text(response_json))
+                            .await
+                        {
+                            warn!("Failed to send StopTransaction response: {err}");
+                        }
+                    }
+                    Err(err) => warn!("Failed to serialize StopTransaction response: {err}"),
+                }
             }
         }
         UnlockConnector => {}
@@ -281,10 +311,16 @@ async fn handle_ocpp_call_error(
         error_description,
         error_details,
     };
-    let ocpp_call_error_json = serde_json::to_string(&ocpp_call_error).unwrap();
-    info!("Sending OCPP CallError: {ocpp_call_error_json}");
-    socket
-        .send(axum::extract::ws::Message::Text(ocpp_call_error_json))
-        .await
-        .unwrap();
+    match serde_json::to_string(&ocpp_call_error) {
+        Ok(ocpp_call_error_json) => {
+            info!("Sending OCPP CallError: {ocpp_call_error_json}");
+            if let Err(err) = socket
+                .send(axum::extract::ws::Message::Text(ocpp_call_error_json))
+                .await
+            {
+                warn!("Failed to send OCPP CallError: {err}");
+            }
+        }
+        Err(err) => warn!("Failed to serialize OCPP CallError: {err}"),
+    }
 }
