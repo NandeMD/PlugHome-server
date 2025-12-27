@@ -2,13 +2,18 @@ use std::{net::SocketAddr, str::FromStr};
 
 use axum::extract::ws::{Message as AxumWSMessage, WebSocket};
 use chrono::Utc;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use rust_ocpp::v1_6::messages::{
     authorize::AuthorizeResponse, boot_notification::BootNotificationResponse,
     data_transfer::DataTransferResponse, heart_beat::HeartbeatResponse,
     stop_transaction::StopTransactionResponse,
 };
+use serde::Serialize;
 use serde_json::json;
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
 use tracing::{debug, error, info, warn};
 
 use crate::state::load_allowed_serial_numbers;
@@ -19,47 +24,102 @@ const CALL_MESSAGE_TYPE_ID: OcppMessageTypeId = 2;
 const CALL_RESULT_MESSAGE_TYPE_ID: OcppMessageTypeId = 3;
 const CALL_ERROR_MESSAGE_TYPE_ID: OcppMessageTypeId = 4;
 
-pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
+enum OcppOutcome {
+    Continue(Vec<AxumWSMessage>),
+    Close(Vec<AxumWSMessage>),
+}
+
+pub async fn handle_socket(socket: WebSocket, addr: SocketAddr) {
     info!(addr = %addr, "New WebSocket connection: {addr}");
 
-    loop {
-        match socket.next().await {
-            Some(Ok(msg)) => match msg {
-                AxumWSMessage::Text(text) => {
-                    let message = text.clone();
-                    info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {message}\n\tAddr: {addr}\n");
-                    let should_continue = handle_ocpp_messages(text, &mut socket).await;
-                    if !should_continue {
+    let (mut ws_tx, mut ws_rx) = socket.split();
+    let (out_tx, mut out_rx) = mpsc::channel::<AxumWSMessage>(64);
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+
+    let reader = {
+        let out_tx = out_tx.clone();
+        tokio::spawn(async move {
+            while let Some(msg) = ws_rx.next().await {
+                let msg = match msg {
+                    Ok(m) => m,
+                    Err(err) => {
+                        warn!(addr = %addr, "WebSocket read error: {err}");
+                        break;
+                    }
+                };
+
+                match msg {
+                    AxumWSMessage::Text(text) => {
+                        info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {text}\n\tAddr: {addr}\n");
+                        let outcome = handle_ocpp_messages(text).await;
+                        let (outgoing, should_close) = match outcome {
+                            OcppOutcome::Continue(out) => (out, false),
+                            OcppOutcome::Close(out) => (out, true),
+                        };
+
+                        if !send_outgoing(&out_tx, outgoing).await {
+                            break;
+                        }
+                        if should_close {
+                            break;
+                        }
+                    }
+                    AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
+                    AxumWSMessage::Ping(payload) => {
+                        // Reply with a Pong frame carrying the same payload
+                        if out_tx.send(AxumWSMessage::Pong(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
+                    AxumWSMessage::Close(frame) => {
+                        let _ = out_tx.send(AxumWSMessage::Close(frame)).await;
                         break;
                     }
                 }
-                AxumWSMessage::Binary(_) => warn!("Unexpected binary message"),
-                AxumWSMessage::Ping(payload) => {
-                    // Reply with a Pong frame carrying the same payload
-                    let _ = socket.send(AxumWSMessage::Pong(payload)).await;
-                }
-                AxumWSMessage::Pong(_) => debug!("Received WebSocket Pong"),
-                AxumWSMessage::Close(_) => {
-                    info!("WebSocket connection closed");
-                    if let Err(err) = socket.close().await {
-                        warn!("Failed to close WebSocket connection: {err}");
-                    }
-                    break;
-                }
-            },
-            Some(Err(err)) => {
-                warn!(addr = %addr, "WebSocket stream error: {err}");
-                break;
             }
-            None => {
-                info!(addr = %addr, "WebSocket stream disconnected");
-                break;
+        })
+    };
+
+    let writer = tokio::spawn(async move {
+        loop {
+            select! {
+                biased;
+
+                _ = &mut shutdown_rx => break,
+
+                maybe_msg = out_rx.recv() => {
+                    match maybe_msg {
+                        Some(msg) => {
+                            if let Err(err) = ws_tx.send(msg).await {
+                                warn!(addr = %addr, "WebSocket write error: {err}");
+                                break;
+                            }
+                        }
+                        None => break, // all senders dropped
+                    }
+                }
             }
         }
-    }
+    });
+
+    let _ = reader.await;
+    let _ = shutdown_tx.send(());
+    let _ = writer.await;
+
+    info!(addr = %addr, "WebSocket connection closed");
 }
 
-async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
+async fn send_outgoing(out_tx: &mpsc::Sender<AxumWSMessage>, outgoing: Vec<AxumWSMessage>) -> bool {
+    for msg in outgoing {
+        if out_tx.send(msg).await.is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+async fn handle_ocpp_messages(message: String) -> OcppOutcome {
     match serde_json::from_str(&message) {
         Ok(ocpp_message) => match ocpp_message {
             OcppMessageType::Call(message_type_id, message_id, action, payload) => {
@@ -69,16 +129,17 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                         received = message_type_id,
                         "Invalid MessageTypeId for Call"
                     );
+                    let mut outgoing = Vec::new();
                     handle_ocpp_call_error(
                         CALL_ERROR_MESSAGE_TYPE_ID,
                         message_id,
                         "ProtocolError".to_string(),
                         "Invalid MessageTypeId for Call".to_string(),
                         json!({ "expected": CALL_MESSAGE_TYPE_ID, "received": message_type_id }),
-                        socket,
+                        &mut outgoing,
                     )
                     .await;
-                    return true;
+                    return OcppOutcome::Continue(outgoing);
                 }
 
                 let action = match OcppActionEnum::from_str(&action) {
@@ -88,31 +149,31 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                     }
                     Err(err) => {
                         error!("Failed to parse OCPP Call Action: {err:?}");
+                        let mut outgoing = Vec::new();
                         handle_ocpp_call_error(
                             CALL_ERROR_MESSAGE_TYPE_ID,
                             message_id,
                             "NotSupported".to_string(),
                             format!("Unknown action: {action}"),
                             json!({ "action": action, "reason": err.to_string() }),
-                            socket,
+                            &mut outgoing,
                         )
                         .await;
-                        return true;
+                        return OcppOutcome::Continue(outgoing);
                     }
                 };
-                handle_ocpp_call(message_type_id, message_id, action, payload, socket).await
+                handle_ocpp_call(message_id, action, payload).await
             }
-            OcppMessageType::CallResult(message_type_id, message_id, payload) => {
+            OcppMessageType::CallResult(message_type_id, _message_id, payload) => {
                 if message_type_id != CALL_RESULT_MESSAGE_TYPE_ID {
                     warn!(
                         expected = CALL_RESULT_MESSAGE_TYPE_ID,
                         received = message_type_id,
                         "Invalid MessageTypeId for CallResult"
                     );
-                    return true;
                 }
-                handle_ocpp_call_result(message_type_id, message_id, payload, socket).await;
-                true
+                handle_ocpp_call_result(payload).await;
+                OcppOutcome::Continue(Vec::new())
             }
             OcppMessageType::CallError(
                 message_type_id,
@@ -134,35 +195,34 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                     error_code,
                     error_description,
                     error_details,
-                    socket,
+                    &mut Vec::new(),
                 )
                 .await;
-                true
+                OcppOutcome::Continue(Vec::new())
             }
         },
         Err(err) => {
             warn!("Failed to parse OCPP message: {err:?}");
-            true
+            OcppOutcome::Continue(Vec::new())
         }
     }
 }
 
 async fn handle_ocpp_call(
-    _: OcppMessageTypeId,
     message_id: OcppMessageId,
     action: OcppActionEnum,
     payload: serde_json::Value,
-    socket: &mut WebSocket,
-) -> bool {
+) -> OcppOutcome {
     let payload = match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => ocpp_payload,
         Err(err) => {
             error!("Failed to parse OCPP Payload: {err:?}");
-            return true;
+            return OcppOutcome::Continue(Vec::new());
         }
     };
 
     use OcppActionEnum::*;
+    let mut outgoing = Vec::new();
 
     match action {
         Authorize => {
@@ -179,20 +239,9 @@ async fn handle_ocpp_call(
                         },
                     })),
                 );
-                match serde_json::to_string(&response) {
-                    Ok(response_json) => {
-                        info!("CALL RESULT RESPONSE:\n{response_json}");
-                        if let Err(err) = socket
-                            .send(axum::extract::ws::Message::Text(response_json))
-                            .await
-                        {
-                            warn!("Failed to send Authorize response: {err}");
-                        }
-                    }
-                    Err(err) => warn!("Failed to serialize Authorize response: {err}"),
-                }
+                push_json(&response, &mut outgoing, "Authorize response");
             }
-            true
+            OcppOutcome::Continue(outgoing)
         }
         BootNotification => {
             if let OcppPayload::BootNotification(BootNotificationKind::Request(boot_notification)) =
@@ -222,37 +271,21 @@ async fn handle_ocpp_call(
                             },
                         )),
                     );
-                    match serde_json::to_string(&response) {
-                        Ok(response_json) => {
-                            info!("CALL RESULT RESPONSE:\n{response_json}");
-                            if let Err(err) = socket
-                                .send(axum::extract::ws::Message::Text(response_json))
-                                .await
-                            {
-                                warn!("Failed to send BootNotification response: {err}");
-                            }
-                        }
-                        Err(err) => warn!("Failed to serialize BootNotification response: {err}"),
-                    }
-                    true
+                    push_json(&response, &mut outgoing, "BootNotification response");
+                    OcppOutcome::Continue(outgoing)
                 } else {
                     error!(
                         "Invalid Charger Serial Number. BootNotification: \
                              {boot_notification:?}"
                     );
-                    if let Err(err) = socket.send(axum::extract::ws::Message::Close(None)).await {
-                        warn!("Failed to send close frame: {err}");
-                    }
-                    false
+                    outgoing.push(AxumWSMessage::Close(None));
+                    OcppOutcome::Close(outgoing)
                 }
             } else {
                 error!("Invalid OCPP BootNotification payload");
-                true
+                OcppOutcome::Continue(outgoing)
             }
         }
-        ChangeAvailability => true,
-        ChangeConfiguration => true,
-        ClearCache => true,
         DataTransfer => {
             if let OcppPayload::DataTransfer(DataTransferKind::Request(data_transfer)) = payload {
                 info!("CALL REQUEST:\n{data_transfer:#?}");
@@ -264,22 +297,10 @@ async fn handle_ocpp_call(
                         data: Some("Data Transfer Accepted".to_string()),
                     })),
                 );
-                match serde_json::to_string(&response) {
-                    Ok(response_json) => {
-                        info!("CALL RESULT RESPONSE:\n{response_json}");
-                        if let Err(err) = socket
-                            .send(axum::extract::ws::Message::Text(response_json))
-                            .await
-                        {
-                            warn!("Failed to send DataTransfer response: {err}");
-                        }
-                    }
-                    Err(err) => warn!("Failed to serialize DataTransfer response: {err}"),
-                }
+                push_json(&response, &mut outgoing, "DataTransfer response");
             }
-            true
+            OcppOutcome::Continue(outgoing)
         }
-        GetConfiguration => true,
         Heartbeat => {
             if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = &payload {
                 info!("CALL REQUEST:\n{heartbeat:#?}");
@@ -294,24 +315,9 @@ async fn handle_ocpp_call(
                     current_time: Utc::now(),
                 })),
             );
-            match serde_json::to_string(&response) {
-                Ok(response_json) => {
-                    info!("CALL RESULT RESPONSE:\n{response_json}");
-                    if let Err(err) = socket
-                        .send(axum::extract::ws::Message::Text(response_json))
-                        .await
-                    {
-                        warn!("Failed to send Heartbeat response: {err}");
-                    }
-                }
-                Err(err) => warn!("Failed to serialize Heartbeat response: {err}"),
-            }
-            true
+            push_json(&response, &mut outgoing, "Heartbeat response");
+            OcppOutcome::Continue(outgoing)
         }
-        MeterValues => true,
-        RemoteStartTransaction => true,
-        RemoteStopTransaction => true,
-        Reset => true,
         StatusNotification => {
             if let OcppPayload::StatusNotification(StatusNotificationKind::Request(
                 status_notification,
@@ -319,9 +325,8 @@ async fn handle_ocpp_call(
             {
                 info!("CALL REQUEST:\n{status_notification:#?}");
             }
-            true
+            OcppOutcome::Continue(outgoing)
         }
-        StartTransaction => true,
         StopTransaction => {
             if let OcppPayload::StopTransaction(StopTransactionKind::Request(stop_transaction)) =
                 payload
@@ -340,22 +345,10 @@ async fn handle_ocpp_call(
                         },
                     )),
                 );
-                match serde_json::to_string(&response) {
-                    Ok(response_json) => {
-                        info!("CALL RESULT RESPONSE:\n{response_json}");
-                        if let Err(err) = socket
-                            .send(axum::extract::ws::Message::Text(response_json))
-                            .await
-                        {
-                            warn!("Failed to send StopTransaction response: {err}");
-                        }
-                    }
-                    Err(err) => warn!("Failed to serialize StopTransaction response: {err}"),
-                }
+                push_json(&response, &mut outgoing, "StopTransaction response");
             }
-            true
+            OcppOutcome::Continue(outgoing)
         }
-        UnlockConnector => true,
         _ => {
             warn!("OCPP action {action:?} not implemented");
             handle_ocpp_call_error(
@@ -364,20 +357,15 @@ async fn handle_ocpp_call(
                 "NotSupported".to_string(),
                 format!("Action {action:?} not implemented"),
                 serde_json::json!({ "action": action.to_string() }),
-                socket,
+                &mut outgoing,
             )
             .await;
-            true
+            OcppOutcome::Continue(outgoing)
         }
     }
 }
 
-async fn handle_ocpp_call_result(
-    _: OcppMessageTypeId,
-    _: OcppMessageId,
-    payload: serde_json::Value,
-    _: &mut WebSocket,
-) {
+async fn handle_ocpp_call_result(payload: serde_json::Value) {
     match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => {
             info!("Parsed OCPP Payload: {ocpp_payload:?}");
@@ -394,7 +382,7 @@ async fn handle_ocpp_call_error(
     error_code: String,
     error_description: String,
     error_details: serde_json::Value,
-    socket: &mut WebSocket,
+    outgoing: &mut Vec<AxumWSMessage>,
 ) {
     let ocpp_call_error = OcppCallError(
         message_type_id,
@@ -403,16 +391,15 @@ async fn handle_ocpp_call_error(
         error_description,
         error_details,
     );
-    match serde_json::to_string(&ocpp_call_error) {
-        Ok(ocpp_call_error_json) => {
-            info!("Sending OCPP CallError: {ocpp_call_error_json}");
-            if let Err(err) = socket
-                .send(axum::extract::ws::Message::Text(ocpp_call_error_json))
-                .await
-            {
-                warn!("Failed to send OCPP CallError: {err}");
-            }
+    push_json(&ocpp_call_error, outgoing, "OCPP CallError");
+}
+
+fn push_json<T: Serialize>(value: &T, outgoing: &mut Vec<AxumWSMessage>, label: &str) {
+    match serde_json::to_string(value) {
+        Ok(json) => {
+            info!("{label}: {json}");
+            outgoing.push(AxumWSMessage::Text(json));
         }
-        Err(err) => warn!("Failed to serialize OCPP CallError: {err}"),
+        Err(err) => warn!("Failed to serialize {label}: {err}"),
     }
 }
