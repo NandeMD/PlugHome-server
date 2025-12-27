@@ -14,6 +14,11 @@ use tracing::{debug, error, info, warn};
 use crate::state::load_allowed_serial_numbers;
 use crate::types::*;
 
+// OCPP 1.6 JSON framing message type identifiers
+const CALL_MESSAGE_TYPE_ID: OcppMessageTypeId = 2;
+const CALL_RESULT_MESSAGE_TYPE_ID: OcppMessageTypeId = 3;
+const CALL_ERROR_MESSAGE_TYPE_ID: OcppMessageTypeId = 4;
+
 pub async fn handle_socket(mut socket: WebSocket, addr: SocketAddr) {
     info!(addr = %addr, "New WebSocket connection: {addr}");
 
@@ -58,6 +63,24 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
     match serde_json::from_str(&message) {
         Ok(ocpp_message) => match ocpp_message {
             OcppMessageType::Call(message_type_id, message_id, action, payload) => {
+                if message_type_id != CALL_MESSAGE_TYPE_ID {
+                    warn!(
+                        expected = CALL_MESSAGE_TYPE_ID,
+                        received = message_type_id,
+                        "Invalid MessageTypeId for Call"
+                    );
+                    handle_ocpp_call_error(
+                        CALL_ERROR_MESSAGE_TYPE_ID,
+                        message_id,
+                        "ProtocolError".to_string(),
+                        "Invalid MessageTypeId for Call".to_string(),
+                        json!({ "expected": CALL_MESSAGE_TYPE_ID, "received": message_type_id }),
+                        socket,
+                    )
+                    .await;
+                    return true;
+                }
+
                 let action = match OcppActionEnum::from_str(&action) {
                     Ok(action) => {
                         debug!("Parsed OCPP call action: {action:?}");
@@ -66,7 +89,7 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                     Err(err) => {
                         error!("Failed to parse OCPP Call Action: {err:?}");
                         handle_ocpp_call_error(
-                            4,
+                            CALL_ERROR_MESSAGE_TYPE_ID,
                             message_id,
                             "NotSupported".to_string(),
                             format!("Unknown action: {action}"),
@@ -80,6 +103,14 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                 handle_ocpp_call(message_type_id, message_id, action, payload, socket).await
             }
             OcppMessageType::CallResult(message_type_id, message_id, payload) => {
+                if message_type_id != CALL_RESULT_MESSAGE_TYPE_ID {
+                    warn!(
+                        expected = CALL_RESULT_MESSAGE_TYPE_ID,
+                        received = message_type_id,
+                        "Invalid MessageTypeId for CallResult"
+                    );
+                    return true;
+                }
                 handle_ocpp_call_result(message_type_id, message_id, payload, socket).await;
                 true
             }
@@ -90,6 +121,13 @@ async fn handle_ocpp_messages(message: String, socket: &mut WebSocket) -> bool {
                 error_description,
                 error_details,
             ) => {
+                if message_type_id != CALL_ERROR_MESSAGE_TYPE_ID {
+                    warn!(
+                        expected = CALL_ERROR_MESSAGE_TYPE_ID,
+                        received = message_type_id,
+                        "Invalid MessageTypeId for CallError"
+                    );
+                }
                 handle_ocpp_call_error(
                     message_type_id,
                     message_id,
