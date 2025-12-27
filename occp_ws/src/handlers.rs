@@ -37,7 +37,7 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr) {
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
 
     let reader = {
-        let out_tx = out_tx.clone();
+        let out_tx = out_tx;
         tokio::spawn(async move {
             while let Some(msg) = ws_rx.next().await {
                 let msg = match msg {
@@ -268,14 +268,15 @@ async fn handle_ocpp_call(
                 payload
             {
                 let allowed_serials = load_allowed_serial_numbers().await;
-                let serial = boot_notification.charge_point_serial_number.clone();
-                let serial_is_allowed = if allowed_serials.is_empty() {
-                    true
-                } else {
-                    serial
-                        .as_ref()
-                        .map(|s| allowed_serials.iter().any(|allowed| allowed == s))
-                        .unwrap_or(false)
+                let serial_is_allowed = {
+                    let serial = boot_notification.charge_point_serial_number.as_ref();
+                    if allowed_serials.is_empty() {
+                        true
+                    } else {
+                        serial
+                            .map(|s| allowed_serials.iter().any(|allowed| allowed == s))
+                            .unwrap_or(false)
+                    }
                 };
 
                 if serial_is_allowed {
