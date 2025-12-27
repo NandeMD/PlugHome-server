@@ -1189,7 +1189,9 @@ dependencies = [
  "strum",
  "strum_macros",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

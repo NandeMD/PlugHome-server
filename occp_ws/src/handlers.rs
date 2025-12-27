@@ -281,27 +281,30 @@ async fn handle_ocpp_call(
         }
         GetConfiguration => true,
         Heartbeat => {
-            if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = payload {
+            if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = &payload {
                 info!("CALL REQUEST:\n{heartbeat:#?}");
-                let response = OcppCallResult(
-                    CALL_RESULT_MESSAGE_TYPE_ID,
-                    message_id,
-                    OcppPayload::Heartbeat(HeartbeatKind::Response(HeartbeatResponse {
-                        current_time: Utc::now(),
-                    })),
-                );
-                match serde_json::to_string(&response) {
-                    Ok(response_json) => {
-                        info!("CALL RESULT RESPONSE:\n{response_json}");
-                        if let Err(err) = socket
-                            .send(axum::extract::ws::Message::Text(response_json))
-                            .await
-                        {
-                            warn!("Failed to send Heartbeat response: {err}");
-                        }
+            } else {
+                warn!("Received Heartbeat action with unexpected payload: {payload:?}");
+            }
+
+            let response = OcppCallResult(
+                CALL_RESULT_MESSAGE_TYPE_ID,
+                message_id,
+                OcppPayload::Heartbeat(HeartbeatKind::Response(HeartbeatResponse {
+                    current_time: Utc::now(),
+                })),
+            );
+            match serde_json::to_string(&response) {
+                Ok(response_json) => {
+                    info!("CALL RESULT RESPONSE:\n{response_json}");
+                    if let Err(err) = socket
+                        .send(axum::extract::ws::Message::Text(response_json))
+                        .await
+                    {
+                        warn!("Failed to send Heartbeat response: {err}");
                     }
-                    Err(err) => warn!("Failed to serialize Heartbeat response: {err}"),
                 }
+                Err(err) => warn!("Failed to serialize Heartbeat response: {err}"),
             }
             true
         }
