@@ -203,7 +203,17 @@ async fn handle_ocpp_messages(message: String) -> OcppOutcome {
         },
         Err(err) => {
             warn!("Failed to parse OCPP message: {err:?}");
-            OcppOutcome::Continue(Vec::new())
+            let mut outgoing = Vec::new();
+            handle_ocpp_call_error(
+                CALL_ERROR_MESSAGE_TYPE_ID,
+                "unknown".to_string(),
+                "FormationViolation".to_string(),
+                "Failed to parse OCPP message".to_string(),
+                json!({ "reason": err.to_string() }),
+                &mut outgoing,
+            )
+            .await;
+            OcppOutcome::Continue(outgoing)
         }
     }
 }
@@ -217,7 +227,17 @@ async fn handle_ocpp_call(
         Ok(ocpp_payload) => ocpp_payload,
         Err(err) => {
             error!("Failed to parse OCPP Payload: {err:?}");
-            return OcppOutcome::Continue(Vec::new());
+            let mut outgoing = Vec::new();
+            handle_ocpp_call_error(
+                CALL_ERROR_MESSAGE_TYPE_ID,
+                message_id,
+                "FormationViolation".to_string(),
+                "Failed to parse OCPP payload".to_string(),
+                json!({ "reason": err.to_string() }),
+                &mut outgoing,
+            )
+            .await;
+            return OcppOutcome::Continue(outgoing);
         }
     };
 
