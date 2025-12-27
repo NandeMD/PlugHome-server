@@ -168,17 +168,17 @@ async fn handle_ocpp_call(
         Authorize => {
             if let OcppPayload::Authorize(AuthorizeKind::Request(authorize)) = payload {
                 info!("CALL REQUEST:\n{authorize:#?}");
-                let response = OcppCallResult {
-                    message_type_id: 3,
+                let response = OcppCallResult(
+                    CALL_RESULT_MESSAGE_TYPE_ID,
                     message_id,
-                    payload: OcppPayload::Authorize(AuthorizeKind::Response(AuthorizeResponse {
+                    OcppPayload::Authorize(AuthorizeKind::Response(AuthorizeResponse {
                         id_tag_info: rust_ocpp::v1_6::types::IdTagInfo {
                             status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
                             expiry_date: None,
                             parent_id_tag: None,
                         },
                     })),
-                };
+                );
                 match serde_json::to_string(&response) {
                     Ok(response_json) => {
                         info!("CALL RESULT RESPONSE:\n{response_json}");
@@ -211,17 +211,17 @@ async fn handle_ocpp_call(
 
                 if serial_is_allowed {
                     info!("CALL REQUEST:\n{boot_notification:#?}");
-                    let response = OcppCallResult {
-                        message_type_id: 3,
+                    let response = OcppCallResult(
+                        CALL_RESULT_MESSAGE_TYPE_ID,
                         message_id,
-                        payload: OcppPayload::BootNotification(BootNotificationKind::Response(
+                        OcppPayload::BootNotification(BootNotificationKind::Response(
                             BootNotificationResponse {
                                 status: rust_ocpp::v1_6::types::RegistrationStatus::Accepted,
                                 current_time: Utc::now(),
                                 interval: 300,
                             },
                         )),
-                    };
+                    );
                     match serde_json::to_string(&response) {
                         Ok(response_json) => {
                             info!("CALL RESULT RESPONSE:\n{response_json}");
@@ -256,16 +256,14 @@ async fn handle_ocpp_call(
         DataTransfer => {
             if let OcppPayload::DataTransfer(DataTransferKind::Request(data_transfer)) = payload {
                 info!("CALL REQUEST:\n{data_transfer:#?}");
-                let response = OcppCallResult {
-                    message_type_id: 3,
+                let response = OcppCallResult(
+                    CALL_RESULT_MESSAGE_TYPE_ID,
                     message_id,
-                    payload: OcppPayload::DataTransfer(DataTransferKind::Response(
-                        DataTransferResponse {
-                            status: rust_ocpp::v1_6::types::DataTransferStatus::Accepted,
-                            data: Some("Data Transfer Accepted".to_string()),
-                        },
-                    )),
-                };
+                    OcppPayload::DataTransfer(DataTransferKind::Response(DataTransferResponse {
+                        status: rust_ocpp::v1_6::types::DataTransferStatus::Accepted,
+                        data: Some("Data Transfer Accepted".to_string()),
+                    })),
+                );
                 match serde_json::to_string(&response) {
                     Ok(response_json) => {
                         info!("CALL RESULT RESPONSE:\n{response_json}");
@@ -285,13 +283,13 @@ async fn handle_ocpp_call(
         Heartbeat => {
             if let OcppPayload::Heartbeat(HeartbeatKind::Request(heartbeat)) = payload {
                 info!("CALL REQUEST:\n{heartbeat:#?}");
-                let response = OcppCallResult {
-                    message_type_id: 3,
+                let response = OcppCallResult(
+                    CALL_RESULT_MESSAGE_TYPE_ID,
                     message_id,
-                    payload: OcppPayload::Heartbeat(HeartbeatKind::Response(HeartbeatResponse {
+                    OcppPayload::Heartbeat(HeartbeatKind::Response(HeartbeatResponse {
                         current_time: Utc::now(),
                     })),
-                };
+                );
                 match serde_json::to_string(&response) {
                     Ok(response_json) => {
                         info!("CALL RESULT RESPONSE:\n{response_json}");
@@ -326,10 +324,10 @@ async fn handle_ocpp_call(
                 payload
             {
                 info!("CALL REQUEST:\n{stop_transaction:#?}");
-                let response = OcppCallResult {
-                    message_type_id: 3,
+                let response = OcppCallResult(
+                    CALL_RESULT_MESSAGE_TYPE_ID,
                     message_id,
-                    payload: OcppPayload::StopTransaction(StopTransactionKind::Response(
+                    OcppPayload::StopTransaction(StopTransactionKind::Response(
                         StopTransactionResponse {
                             id_tag_info: Some(rust_ocpp::v1_6::types::IdTagInfo {
                                 status: rust_ocpp::v1_6::types::AuthorizationStatus::Accepted,
@@ -338,7 +336,7 @@ async fn handle_ocpp_call(
                             }),
                         },
                     )),
-                };
+                );
                 match serde_json::to_string(&response) {
                     Ok(response_json) => {
                         info!("CALL RESULT RESPONSE:\n{response_json}");
@@ -355,6 +353,19 @@ async fn handle_ocpp_call(
             true
         }
         UnlockConnector => true,
+        _ => {
+            warn!("OCPP action {action:?} not implemented");
+            handle_ocpp_call_error(
+                CALL_ERROR_MESSAGE_TYPE_ID,
+                message_id,
+                "NotSupported".to_string(),
+                format!("Action {action:?} not implemented"),
+                serde_json::json!({ "action": action.to_string() }),
+                socket,
+            )
+            .await;
+            true
+        }
     }
 }
 
@@ -382,13 +393,13 @@ async fn handle_ocpp_call_error(
     error_details: serde_json::Value,
     socket: &mut WebSocket,
 ) {
-    let ocpp_call_error = OcppCallError {
+    let ocpp_call_error = OcppCallError(
         message_type_id,
         message_id,
         error_code,
         error_description,
         error_details,
-    };
+    );
     match serde_json::to_string(&ocpp_call_error) {
         Ok(ocpp_call_error_json) => {
             info!("Sending OCPP CallError: {ocpp_call_error_json}");
