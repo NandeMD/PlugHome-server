@@ -1,20 +1,26 @@
 use chrono::{TimeZone, Utc};
 use occp_ws::types::*;
-use rust_ocpp::v1_6::messages::boot_notification::{BootNotificationRequest, BootNotificationResponse};
+use rust_ocpp::v1_6::messages::boot_notification::{
+    BootNotificationRequest, BootNotificationResponse,
+};
 use rust_ocpp::v1_6::types::RegistrationStatus;
 use serde_json::json;
 
 #[test]
 fn serializes_call_as_ocpp_array() {
-    let payload = OcppPayload::BootNotification(BootNotificationKind::Request(
-        BootNotificationRequest {
+    let payload =
+        OcppPayload::BootNotification(BootNotificationKind::Request(BootNotificationRequest {
             charge_point_model: "ModelX".to_string(),
             charge_point_vendor: "AcmeCorp".to_string(),
             ..Default::default()
-        },
-    ));
+        }));
 
-    let call = OcppCall(2, "123".to_string(), OcppActionEnum::BootNotification, payload);
+    let call = OcppCall(
+        2,
+        "123".to_string(),
+        OcppActionEnum::BootNotification,
+        payload,
+    );
 
     let framed = serde_json::to_value(&call).expect("serialize call");
 
@@ -53,13 +59,12 @@ fn deserializes_call_from_ocpp_array() {
 fn serializes_call_result_as_ocpp_array() {
     let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
 
-    let payload = OcppPayload::BootNotification(BootNotificationKind::Response(
-        BootNotificationResponse {
+    let payload =
+        OcppPayload::BootNotification(BootNotificationKind::Response(BootNotificationResponse {
             status: RegistrationStatus::Accepted,
             current_time: ts,
             interval: 300,
-        },
-    ));
+        }));
 
     let call_result = OcppCallResult(3, "abc".to_string(), payload);
 

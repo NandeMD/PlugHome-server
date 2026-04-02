@@ -8,12 +8,10 @@ use rust_ocpp::v1_6::messages::{
     clear_charging_profile::{ClearChargingProfileRequest, ClearChargingProfileResponse},
     data_transfer::{DataTransferRequest, DataTransferResponse},
     diagnostics_status_notification::{
-        DiagnosticsStatusNotificationRequest,
-        DiagnosticsStatusNotificationResponse,
+        DiagnosticsStatusNotificationRequest, DiagnosticsStatusNotificationResponse,
     },
     firmware_status_notification::{
-        FirmwareStatusNotificationRequest,
-        FirmwareStatusNotificationResponse,
+        FirmwareStatusNotificationRequest, FirmwareStatusNotificationResponse,
     },
     get_composite_schedule::{GetCompositeScheduleRequest, GetCompositeScheduleResponse},
     get_configuration::{GetConfigurationRequest, GetConfigurationResponse},
@@ -278,34 +276,34 @@ pub enum UpdateFirmwareKind {
 pub enum OcppPayload {
     // OCPP 1.6 JSON
     // Core
-    Authorize(AuthorizeKind),                                   // Charger -> Server
-    BootNotification(BootNotificationKind),                     // Charger -> Server
-    CancelReservation(CancelReservationKind),                   // Server -> Charger
-    ChangeAvailability(ChangeAvailabilityKind),                 // Server -> Charger
-    ChangeConfiguration(ChangeConfigurationKind),               // Server -> Charger
-    ClearCache(ClearCacheKind),                                 // Server -> Charger
-    ClearChargingProfile(ClearChargingProfileKind),             // Server -> Charger
-    DataTransfer(DataTransferKind),                             // Both directions
+    Authorize(AuthorizeKind),                       // Charger -> Server
+    BootNotification(BootNotificationKind),         // Charger -> Server
+    CancelReservation(CancelReservationKind),       // Server -> Charger
+    ChangeAvailability(ChangeAvailabilityKind),     // Server -> Charger
+    ChangeConfiguration(ChangeConfigurationKind),   // Server -> Charger
+    ClearCache(ClearCacheKind),                     // Server -> Charger
+    ClearChargingProfile(ClearChargingProfileKind), // Server -> Charger
+    DataTransfer(DataTransferKind),                 // Both directions
     DiagnosticsStatusNotification(DiagnosticsStatusNotificationKind), // Charger -> Server
-    FirmwareStatusNotification(FirmwareStatusNotificationKind),       // Charger -> Server
-    GetCompositeSchedule(GetCompositeScheduleKind),             // Server -> Charger
-    GetConfiguration(GetConfigurationKind),                     // Server -> Charger
-    GetDiagnostics(GetDiagnosticsKind),                         // Server -> Charger
-    GetLocalListVersion(GetLocalListVersionKind),               // Server -> Charger
-    Heartbeat(HeartbeatKind),                                   // Charger -> Server
-    MeterValues(MeterValuesKind),                               // Charger -> Server
-    RemoteStartTransaction(RemoteStartTransactionKind),         // Server -> Charger
-    RemoteStopTransaction(RemoteStopTransactionKind),           // Server -> Charger
-    ReserveNow(ReserveNowKind),                                 // Server -> Charger
-    Reset(ResetKind),                                           // Server -> Charger
-    SendLocalList(SendLocalListKind),                           // Server -> Charger
-    SetChargingProfile(SetChargingProfileKind),                 // Server -> Charger
-    StartTransaction(StartTransactionKind),                     // Charger -> Server
-    StatusNotification(StatusNotificationKind),                 // Charger -> Server
-    StopTransaction(StopTransactionKind),                       // Charger -> Server
-    TriggerMessage(TriggerMessageKind),                         // Server -> Charger
-    UnlockConnector(UnlockConnectorKind),                       // Server -> Charger
-    UpdateFirmware(UpdateFirmwareKind),                         // Server -> Charger
+    FirmwareStatusNotification(FirmwareStatusNotificationKind), // Charger -> Server
+    GetCompositeSchedule(GetCompositeScheduleKind), // Server -> Charger
+    GetConfiguration(GetConfigurationKind),         // Server -> Charger
+    GetDiagnostics(GetDiagnosticsKind),             // Server -> Charger
+    GetLocalListVersion(GetLocalListVersionKind),   // Server -> Charger
+    Heartbeat(HeartbeatKind),                       // Charger -> Server
+    MeterValues(MeterValuesKind),                   // Charger -> Server
+    RemoteStartTransaction(RemoteStartTransactionKind), // Server -> Charger
+    RemoteStopTransaction(RemoteStopTransactionKind), // Server -> Charger
+    ReserveNow(ReserveNowKind),                     // Server -> Charger
+    Reset(ResetKind),                               // Server -> Charger
+    SendLocalList(SendLocalListKind),               // Server -> Charger
+    SetChargingProfile(SetChargingProfileKind),     // Server -> Charger
+    StartTransaction(StartTransactionKind),         // Charger -> Server
+    StatusNotification(StatusNotificationKind),     // Charger -> Server
+    StopTransaction(StopTransactionKind),           // Charger -> Server
+    TriggerMessage(TriggerMessageKind),             // Server -> Charger
+    UnlockConnector(UnlockConnectorKind),           // Server -> Charger
+    UpdateFirmware(UpdateFirmwareKind),             // Server -> Charger
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
