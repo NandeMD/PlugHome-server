@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{ConnectInfo, ws::WebSocketUpgrade},
+    extract::{ConnectInfo, Path, ws::WebSocketUpgrade},
     response::IntoResponse,
 };
 use axum_extra::TypedHeader;
@@ -11,10 +11,11 @@ use crate::state::START_TIME;
 
 pub async fn upgrade_to_ws(
     ws: WebSocketUpgrade,
+    Path(station_id): Path<String>,
     _user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, addr))
+    ws.on_upgrade(move |socket| handle_socket(socket, addr, station_id))
 }
 
 pub async fn healthcheck_route() -> impl IntoResponse {

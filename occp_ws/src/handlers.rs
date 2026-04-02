@@ -29,28 +29,36 @@ enum OcppOutcome {
     Close(Vec<AxumWSMessage>),
 }
 
-pub async fn handle_socket(socket: WebSocket, addr: SocketAddr) {
-    info!(addr = %addr, "New WebSocket connection: {addr}");
+pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: String) {
+    info!(
+        addr = %addr,
+        station_id = %station_id,
+        "New WebSocket connection for station {station_id}: {addr}"
+    );
 
     let (mut ws_tx, mut ws_rx) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<AxumWSMessage>(64);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+    let writer_station_id = station_id.clone();
 
     let reader = {
         let out_tx = out_tx;
+        let station_id = station_id.clone();
         tokio::spawn(async move {
             while let Some(msg) = ws_rx.next().await {
                 let msg = match msg {
                     Ok(m) => m,
                     Err(err) => {
-                        warn!(addr = %addr, "WebSocket read error: {err}");
+                        warn!(addr = %addr, station_id = %station_id, "WebSocket read error: {err}");
                         break;
                     }
                 };
 
                 match msg {
                     AxumWSMessage::Text(text) => {
-                        info!("\nINCOMING CALL\nFROM CHARGER\n\tMessage: {text}\n\tAddr: {addr}\n");
+                        info!(
+                            "\nINCOMING CALL\nFROM CHARGER\n\tMessage: {text}\n\tAddr: {addr}\n\tStationId: {station_id}\n"
+                        );
                         let outcome = handle_ocpp_messages(text).await;
                         let (outgoing, should_close) = match outcome {
                             OcppOutcome::Continue(out) => (out, false),
@@ -92,7 +100,7 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr) {
                     match maybe_msg {
                         Some(msg) => {
                             if let Err(err) = ws_tx.send(msg).await {
-                                warn!(addr = %addr, "WebSocket write error: {err}");
+                                warn!(addr = %addr, station_id = %writer_station_id, "WebSocket write error: {err}");
                                 break;
                             }
                         }
@@ -107,7 +115,11 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr) {
     let _ = shutdown_tx.send(());
     let _ = writer.await;
 
-    info!(addr = %addr, "WebSocket connection closed");
+    info!(
+        addr = %addr,
+        station_id = %station_id,
+        "WebSocket connection closed for station {station_id}"
+    );
 }
 
 async fn send_outgoing(out_tx: &mpsc::Sender<AxumWSMessage>, outgoing: Vec<AxumWSMessage>) -> bool {
