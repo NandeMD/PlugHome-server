@@ -16,6 +16,9 @@ pub fn load_env() {
 pub struct ServerConfig {
     pub addr: String,
     pub port: String,
+    pub rust_log: String,
+    pub allowed_serials: Vec<String>,
+    pub db_url: String,
 }
 
 impl ServerConfig {
@@ -27,8 +30,17 @@ impl ServerConfig {
     pub fn from_env() -> Result<Self> {
         let addr = env::var("ADDR").context("ADDR must be set")?;
         let port = env::var("PORT").context("PORT must be set")?;
+        let rust_log = env::var("RUST_LOG").context("Pls specify a log level")?;
+        let allowed_serials = allowed_serial_numbers().unwrap_or_default();
+        let db_url = env::var("DB_URL").context("DB_URL must be set")?;
 
-        Ok(Self { addr, port })
+        Ok(Self {
+            addr,
+            port,
+            rust_log,
+            allowed_serials,
+            db_url,
+        })
     }
 
     /// Combined host:port string.
