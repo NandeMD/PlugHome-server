@@ -2,6 +2,9 @@ pub mod entities;
 pub mod migration;
 
 use common::ServerConfig;
+pub use entities::boot_notification::{
+    self, Entity as BootNotification, Model as BootNotificationModel,
+};
 pub use entities::station::{
     self, Entity as Station, Model as StationModel, StationConnectionState,
 };

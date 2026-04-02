@@ -21,6 +21,15 @@ pub enum StationConnectionState {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::boot_notification::Entity")]
+    BootNotification,
+}
+
+impl Related<super::boot_notification::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::BootNotification.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
