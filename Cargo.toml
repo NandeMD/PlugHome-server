@@ -1,3 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["api","occp_ws","common"]
+members = ["api","occp_ws","common", "db"]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }
+axum = { version = "0.7.5", features = ["ws", "macros"] }
+chrono = "0.4.38"
+tracing = "0.1.40"

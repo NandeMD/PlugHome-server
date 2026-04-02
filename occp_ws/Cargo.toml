@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread"] }
-axum = { version = "0.7.5", features = ["ws", "macros"] }
+tokio.workspace = true
+axum.workspace = true
+chrono.workspace = true
+tracing.workspace = true
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
-chrono = "0.4.38"
 rust-ocpp = { version = "3.0.4", default-features = false, features = ["v1_6"] }
 futures = "0.3.30"
-tracing = "0.1.40"
 headers = "0.4.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
