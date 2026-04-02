@@ -15,6 +15,7 @@ headers = "0.4.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
 common = { path = "../common" }
+db = { path = "../db" }
 serde = "1.0"
 serde_json = "1.0"
 
@@ -22,3 +23,4 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net"] }
 tokio-tungstenite = "0.24"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+sea-orm = { version = "0.12.15", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-chrono"] }

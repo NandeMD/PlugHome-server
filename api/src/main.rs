@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, panic};
+use std::{net::SocketAddr, panic, sync::Arc};
 
 use anyhow::{Context, Result};
 use axum::{Router, routing::get};
@@ -8,9 +8,10 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 use common::{ServerConfig, init_tracing, load_env};
+use db::Db;
 
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
-use occp_ws::state::START_TIME;
+use occp_ws::state::{AppState, START_TIME};
 
 async fn run() -> Result<()> {
     async fn time_now() -> DateTime<Utc> {
@@ -27,6 +28,7 @@ async fn run() -> Result<()> {
     }));
 
     let config = ServerConfig::from_env()?;
+    let db = Arc::new(Db::try_new(&config).await?);
     let tcp_listener = net::TcpListener::bind(config.socket_addr())
         .await
         .with_context(|| format!("Failed to bind to address: {}", config.socket_addr()))?;
@@ -35,6 +37,7 @@ async fn run() -> Result<()> {
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
         .route("/", get(healthcheck_route))
+        .with_state(AppState { db })
         .layer(TraceLayer::new_for_http());
 
     axum::serve(

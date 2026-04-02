@@ -12,3 +12,4 @@ anyhow = "1"
 tower-http = { version = "0.5", features = ["trace"] }
 occp_ws = { path = "../occp_ws" }
 common = { path = "../common" }
+db = { path = "../db" }

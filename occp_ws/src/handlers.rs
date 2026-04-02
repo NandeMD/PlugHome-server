@@ -1,7 +1,8 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use axum::extract::ws::{Message as AxumWSMessage, WebSocket};
 use chrono::Utc;
+use db::Db;
 use futures::{SinkExt, StreamExt};
 use rust_ocpp::v1_6::messages::{
     authorize::AuthorizeResponse, boot_notification::BootNotificationResponse,
@@ -29,7 +30,12 @@ enum OcppOutcome {
     Close(Vec<AxumWSMessage>),
 }
 
-pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: String) {
+pub async fn handle_socket(
+    socket: WebSocket,
+    addr: SocketAddr,
+    station_id: String,
+    db: Arc<Db>,
+) {
     info!(
         addr = %addr,
         station_id = %station_id,
@@ -44,6 +50,7 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: Stri
     let reader = {
         let out_tx = out_tx;
         let station_id = station_id.clone();
+        let db = db.clone();
         tokio::spawn(async move {
             while let Some(msg) = ws_rx.next().await {
                 let msg = match msg {
@@ -59,7 +66,7 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: Stri
                         info!(
                             "\nINCOMING CALL\nFROM CHARGER\n\tMessage: {text}\n\tAddr: {addr}\n\tStationId: {station_id}\n"
                         );
-                        let outcome = handle_ocpp_messages(text).await;
+                        let outcome = handle_ocpp_messages(text, &station_id, db.clone()).await;
                         let (outgoing, should_close) = match outcome {
                             OcppOutcome::Continue(out) => (out, false),
                             OcppOutcome::Close(out) => (out, true),
@@ -131,7 +138,7 @@ async fn send_outgoing(out_tx: &mpsc::Sender<AxumWSMessage>, outgoing: Vec<AxumW
     true
 }
 
-async fn handle_ocpp_messages(message: String) -> OcppOutcome {
+async fn handle_ocpp_messages(message: String, station_id: &str, db: Arc<Db>) -> OcppOutcome {
     match serde_json::from_str(&message) {
         Ok(ocpp_message) => match ocpp_message {
             OcppMessageType::Call(message_type_id, message_id, action, payload) => {
@@ -174,7 +181,7 @@ async fn handle_ocpp_messages(message: String) -> OcppOutcome {
                         return OcppOutcome::Continue(outgoing);
                     }
                 };
-                handle_ocpp_call(message_id, action, payload).await
+                handle_ocpp_call(message_id, action, payload, station_id, db).await
             }
             OcppMessageType::CallResult(message_type_id, _message_id, payload) => {
                 if message_type_id != CALL_RESULT_MESSAGE_TYPE_ID {
@@ -234,6 +241,8 @@ async fn handle_ocpp_call(
     message_id: OcppMessageId,
     action: OcppActionEnum,
     payload: serde_json::Value,
+    station_id: &str,
+    db: Arc<Db>,
 ) -> OcppOutcome {
     let payload = match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => ocpp_payload,
@@ -292,6 +301,23 @@ async fn handle_ocpp_call(
                 };
 
                 if serial_is_allowed {
+                    if let Err(err) = db.record_boot_notification(station_id).await {
+                        error!(
+                            station_id = %station_id,
+                            "Failed to record boot notification: {err}"
+                        );
+                        handle_ocpp_call_error(
+                            CALL_ERROR_MESSAGE_TYPE_ID,
+                            message_id,
+                            "InternalError".to_string(),
+                            "Failed to persist boot notification".to_string(),
+                            json!({ "reason": err.to_string() }),
+                            &mut outgoing,
+                        )
+                        .await;
+                        return OcppOutcome::Continue(outgoing);
+                    }
+
                     info!("CALL REQUEST:\n{boot_notification:#?}");
                     let response = OcppCallResult(
                         CALL_RESULT_MESSAGE_TYPE_ID,

@@ -2,28 +2,43 @@ use std::{
     error::Error,
     io::{self, ErrorKind},
     net::SocketAddr,
+    sync::Arc,
     time::Duration,
 };
 
 use axum::{Router, routing::get};
 use chrono::Utc;
+use common::ServerConfig;
+use db::{BootNotification, Db, Station, boot_notification, station};
 use futures::{SinkExt, StreamExt};
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
-use occp_ws::state::START_TIME;
+use occp_ws::state::{AppState, START_TIME};
 use occp_ws::types::*;
 use rust_ocpp::v1_6::messages::boot_notification::BootNotificationRequest;
 use rust_ocpp::v1_6::messages::heart_beat::HeartbeatRequest;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use tracing_subscriber::EnvFilter;
 
-async fn start_test_server() -> (SocketAddr, oneshot::Sender<()>, JoinHandle<()>) {
+fn test_config() -> ServerConfig {
+    ServerConfig {
+        addr: "127.0.0.1".to_owned(),
+        port: "0".to_owned(),
+        rust_log: "info".to_owned(),
+        allowed_serials: Vec::new(),
+        db_url: "sqlite::memory:".to_owned(),
+    }
+}
+
+async fn start_test_server() -> (SocketAddr, Arc<Db>, oneshot::Sender<()>, JoinHandle<()>) {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_test_writer()
         .try_init();
 
     START_TIME.get_or_init(|| async { Utc::now() }).await;
+    let db = Arc::new(Db::try_new(&test_config()).await.expect("init test db"));
 
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -32,7 +47,8 @@ async fn start_test_server() -> (SocketAddr, oneshot::Sender<()>, JoinHandle<()>
 
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
-        .route("/", get(healthcheck_route));
+        .route("/", get(healthcheck_route))
+        .with_state(AppState { db: db.clone() });
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
@@ -50,7 +66,7 @@ async fn start_test_server() -> (SocketAddr, oneshot::Sender<()>, JoinHandle<()>
         }
     });
 
-    (addr, shutdown_tx, handle)
+    (addr, db, shutdown_tx, handle)
 }
 
 async fn recv_text_within(
@@ -86,7 +102,7 @@ async fn recv_text_within(
 
 #[tokio::test]
 async fn handles_heartbeat_call_over_websocket() -> Result<(), Box<dyn Error>> {
-    let (addr, shutdown, server) = start_test_server().await;
+    let (addr, _db, shutdown, server) = start_test_server().await;
 
     let url = format!("ws://{addr}/station-123");
     let (mut socket, _) = connect_async(&url).await?;
@@ -165,7 +181,7 @@ async fn handles_heartbeat_call_over_websocket() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn handles_ping_pong_and_close() -> Result<(), Box<dyn Error>> {
-    let (addr, shutdown, server) = start_test_server().await;
+    let (addr, _db, shutdown, server) = start_test_server().await;
 
     let url = format!("ws://{addr}/station-789");
     let (mut socket, _) = connect_async(&url).await?;
@@ -216,7 +232,7 @@ async fn handles_ping_pong_and_close() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn accepts_boot_notification_call_over_websocket() -> Result<(), Box<dyn Error>> {
-    let (addr, shutdown, server) = start_test_server().await;
+    let (addr, db, shutdown, server) = start_test_server().await;
 
     let url = format!("ws://{addr}/station-456");
     let (mut socket, _) = connect_async(&url).await?;
@@ -274,6 +290,18 @@ async fn accepts_boot_notification_call_over_websocket() -> Result<(), Box<dyn E
         }
         other => panic!("unexpected message type: {other:?}"),
     }
+
+    let station = Station::find()
+        .filter(station::Column::StationId.eq("station-456"))
+        .one(&db.conn)
+        .await?
+        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "station was not persisted"))?;
+    let boot_notifications = BootNotification::find()
+        .filter(boot_notification::Column::StationId.eq(station.id))
+        .all(&db.conn)
+        .await?;
+
+    assert_eq!(boot_notifications.len(), 1);
 
     socket.close(None).await?;
 
