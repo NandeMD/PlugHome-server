@@ -40,9 +40,9 @@ This project aims to provide a **self-hosted EV charger management server** that
 ### 🔌 Charger Connectivity
 
 * [x] Chargers can connect securely to the server
-* [ ] Automatic charger registration on first connection
-* [ ] Live online / offline status
-* [ ] Last-seen timestamp for each charger
+* [x] Automatic charger registration on first connection
+* [x] Live online / offline status
+* [x] Last-seen timestamp for each charger
 * [ ] Support for chargers behind NAT (outbound connection only)
 * [ ] Graceful handling of reconnects and power loss
 
