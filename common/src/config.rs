@@ -11,7 +11,7 @@ pub fn load_env() {
     let _ = dotenvy::dotenv();
 }
 
-/// Server address/port configuration.
+/// Server configuration.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub addr: String,
@@ -19,20 +19,21 @@ pub struct ServerConfig {
     pub rust_log: String,
     pub allowed_serials: Vec<String>,
     pub db_url: String,
+    pub station_timeout: usize, // In seconds
 }
 
 impl ServerConfig {
     /// Build `ServerConfig` from environment variables.
-    ///
-    /// Required:
-    /// - `ADDR`
-    /// - `PORT`
     pub fn from_env() -> Result<Self> {
         let addr = env::var("ADDR").context("ADDR must be set")?;
         let port = env::var("PORT").context("PORT must be set")?;
         let rust_log = env::var("RUST_LOG").context("Pls specify a log level")?;
         let allowed_serials = allowed_serial_numbers().unwrap_or_default();
         let db_url = env::var("DB_URL").context("DB_URL must be set")?;
+        let station_timeout = env::var("STATION_TIMEOUT")
+            .context("STATION_TIMEOUT must be set (seconds)")?
+            .parse::<usize>()
+            .expect("STATION_TIMEOUT must be a valid unsigned integer!");
 
         Ok(Self {
             addr,
@@ -40,6 +41,7 @@ impl ServerConfig {
             rust_log,
             allowed_serials,
             db_url,
+            station_timeout,
         })
     }
 

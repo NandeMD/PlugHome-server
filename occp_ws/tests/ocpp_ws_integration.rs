@@ -17,8 +17,8 @@ use occp_ws::types::*;
 use rust_ocpp::v1_6::messages::boot_notification::BootNotificationRequest;
 use rust_ocpp::v1_6::messages::heart_beat::HeartbeatRequest;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle, time::timeout};
 use tokio::time::sleep;
+use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use tracing_subscriber::EnvFilter;
 
@@ -29,6 +29,7 @@ fn test_config() -> ServerConfig {
         rust_log: "info".to_owned(),
         allowed_serials: Vec::new(),
         db_url: "sqlite::memory:".to_owned(),
+        station_timeout: 30,
     }
 }
 
@@ -346,14 +347,19 @@ async fn accepts_boot_notification_call_over_websocket() -> Result<(), Box<dyn E
 async fn marks_registered_station_online_when_websocket_connects() -> Result<(), Box<dyn Error>> {
     let (addr, db, shutdown, server) = start_test_server().await;
 
-    db.record_boot_notification("station-online-on-connect").await?;
+    db.record_boot_notification("station-online-on-connect")
+        .await?;
     db.mark_station_offline("station-online-on-connect").await?;
 
     let url = format!("ws://{addr}/station-online-on-connect");
     let (mut socket, _) = connect_async(&url).await?;
 
-    wait_for_station_state(&db, "station-online-on-connect", StationConnectionState::Online)
-        .await?;
+    wait_for_station_state(
+        &db,
+        "station-online-on-connect",
+        StationConnectionState::Online,
+    )
+    .await?;
 
     let station = Station::find()
         .filter(station::Column::StationId.eq("station-online-on-connect"))
