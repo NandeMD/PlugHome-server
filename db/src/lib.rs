@@ -66,4 +66,18 @@ impl Db {
 
         txn.commit().await
     }
+
+    pub async fn mark_station_offline(&self, station_id: &str) -> Result<(), DbErr> {
+        if let Some(station) = Station::find()
+            .filter(station::Column::StationId.eq(station_id))
+            .one(&self.conn)
+            .await?
+        {
+            let mut active_station: station::ActiveModel = station.into();
+            active_station.connection_state = Set(StationConnectionState::Offline);
+            active_station.update(&self.conn).await?;
+        }
+
+        Ok(())
+    }
 }

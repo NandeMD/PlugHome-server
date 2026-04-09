@@ -93,3 +93,20 @@ async fn record_boot_notification_reuses_station_and_adds_notification() {
     assert!(updated_station.last_seen > first_last_seen);
     assert_eq!(boot_notifications.len(), 2);
 }
+
+#[tokio::test]
+async fn mark_station_offline_updates_existing_station() {
+    let db = setup_test_db().await;
+
+    db.record_boot_notification("station-123").await.unwrap();
+    db.mark_station_offline("station-123").await.unwrap();
+
+    let station = Station::find()
+        .filter(station::Column::StationId.eq("station-123"))
+        .one(&db.conn)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(station.connection_state, StationConnectionState::Offline);
+}
