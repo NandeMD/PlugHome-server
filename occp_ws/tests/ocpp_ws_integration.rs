@@ -50,7 +50,10 @@ async fn start_test_server() -> (SocketAddr, Arc<Db>, oneshot::Sender<()>, JoinH
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
         .route("/", get(healthcheck_route))
-        .with_state(AppState { db: db.clone() });
+        .with_state(AppState {
+            db: db.clone(),
+            config: Arc::new(test_config()),
+        });
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 

@@ -19,7 +19,7 @@ pub struct ServerConfig {
     pub rust_log: String,
     pub allowed_serials: Vec<String>,
     pub db_url: String,
-    pub station_timeout: usize, // In seconds
+    pub station_timeout: u32, // In seconds
 }
 
 impl ServerConfig {
@@ -32,7 +32,7 @@ impl ServerConfig {
         let db_url = env::var("DB_URL").context("DB_URL must be set")?;
         let station_timeout = env::var("STATION_TIMEOUT")
             .context("STATION_TIMEOUT must be set (seconds)")?
-            .parse::<usize>()
+            .parse::<u32>()
             .expect("STATION_TIMEOUT must be a valid unsigned integer!");
 
         Ok(Self {

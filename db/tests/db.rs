@@ -11,6 +11,7 @@ fn test_config() -> ServerConfig {
         rust_log: "info".to_owned(),
         allowed_serials: Vec::new(),
         db_url: "sqlite::memory:".to_owned(),
+        station_timeout: 30,
     }
 }
 

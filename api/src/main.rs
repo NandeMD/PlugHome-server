@@ -27,7 +27,7 @@ async fn run() -> Result<()> {
         tracing::error!("\n\nPanic: {err:#?}\n\n");
     }));
 
-    let config = ServerConfig::from_env()?;
+    let config = Arc::new(ServerConfig::from_env()?);
     let db = Arc::new(Db::try_new(&config).await?);
     let tcp_listener = net::TcpListener::bind(config.socket_addr())
         .await
@@ -37,7 +37,10 @@ async fn run() -> Result<()> {
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
         .route("/", get(healthcheck_route))
-        .with_state(AppState { db })
+        .with_state(AppState {
+            db,
+            config: Arc::clone(&config),
+        })
         .layer(TraceLayer::new_for_http());
 
     axum::serve(

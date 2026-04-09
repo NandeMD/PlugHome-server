@@ -19,6 +19,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::state::load_allowed_serial_numbers;
 use crate::types::*;
+use common::ServerConfig;
 
 // OCPP 1.6 JSON framing message type identifiers
 const CALL_MESSAGE_TYPE_ID: OcppMessageTypeId = 2;
@@ -30,7 +31,15 @@ enum OcppOutcome {
     Close(Vec<AxumWSMessage>),
 }
 
-pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: String, db: Arc<Db>) {
+pub async fn handle_socket(
+    socket: WebSocket,
+    addr: SocketAddr,
+    station_id: String,
+    db: Arc<Db>,
+    conf: Arc<ServerConfig>,
+) {
+    let conf = conf.clone();
+
     info!(
         addr = %addr,
         station_id = %station_id,
@@ -75,7 +84,8 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: Stri
                         info!(
                             "\nINCOMING CALL\nFROM CHARGER\n\tMessage: {text}\n\tAddr: {addr}\n\tStationId: {station_id}\n"
                         );
-                        let outcome = handle_ocpp_messages(text, &station_id, db.clone()).await;
+                        let outcome =
+                            handle_ocpp_messages(text, &station_id, db.clone(), &conf).await;
                         let (outgoing, should_close) = match outcome {
                             OcppOutcome::Continue(out) => (out, false),
                             OcppOutcome::Close(out) => (out, true),
@@ -155,7 +165,12 @@ async fn send_outgoing(out_tx: &mpsc::Sender<AxumWSMessage>, outgoing: Vec<AxumW
     true
 }
 
-async fn handle_ocpp_messages(message: String, station_id: &str, db: Arc<Db>) -> OcppOutcome {
+async fn handle_ocpp_messages(
+    message: String,
+    station_id: &str,
+    db: Arc<Db>,
+    conf: &ServerConfig,
+) -> OcppOutcome {
     match serde_json::from_str(&message) {
         Ok(ocpp_message) => match ocpp_message {
             OcppMessageType::Call(message_type_id, message_id, action, payload) => {
@@ -198,7 +213,7 @@ async fn handle_ocpp_messages(message: String, station_id: &str, db: Arc<Db>) ->
                         return OcppOutcome::Continue(outgoing);
                     }
                 };
-                handle_ocpp_call(message_id, action, payload, station_id, db).await
+                handle_ocpp_call(message_id, action, payload, station_id, db, conf).await
             }
             OcppMessageType::CallResult(message_type_id, _message_id, payload) => {
                 if message_type_id != CALL_RESULT_MESSAGE_TYPE_ID {
@@ -260,6 +275,7 @@ async fn handle_ocpp_call(
     payload: serde_json::Value,
     station_id: &str,
     db: Arc<Db>,
+    conf: &ServerConfig,
 ) -> OcppOutcome {
     let payload = match serde_json::from_value::<OcppPayload>(payload) {
         Ok(ocpp_payload) => ocpp_payload,
@@ -343,7 +359,7 @@ async fn handle_ocpp_call(
                             BootNotificationResponse {
                                 status: rust_ocpp::v1_6::types::RegistrationStatus::Accepted,
                                 current_time: Utc::now(),
-                                interval: 300,
+                                interval: conf.station_timeout,
                             },
                         )),
                     );

@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{ConnectInfo, Path, State, ws::WebSocketUpgrade},
@@ -17,7 +17,8 @@ pub async fn upgrade_to_ws(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     let db = state.db;
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, station_id, db))
+    let conf = Arc::clone(&state.config);
+    ws.on_upgrade(move |socket| handle_socket(socket, addr, station_id, db, conf))
 }
 
 pub async fn healthcheck_route() -> impl IntoResponse {

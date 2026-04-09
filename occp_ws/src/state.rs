@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use common::allowed_serial_numbers;
+use common::{ServerConfig, allowed_serial_numbers};
 use db::Db;
 use tokio::sync::OnceCell;
 use tracing::warn;
@@ -12,6 +12,7 @@ pub static ALLOWED_SERIAL_NUMBERS: OnceCell<Vec<String>> = OnceCell::const_new()
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Db>,
+    pub config: Arc<ServerConfig>,
 }
 
 pub fn get_allowed_serial_numbers() -> Option<&'static Vec<String>> {
