@@ -9,11 +9,11 @@ use tracing::info;
 
 mod sweeper;
 
+use common::state::{AppState, START_TIME};
 use common::{ServerConfig, init_tracing, load_env};
 use db::Db;
 
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
-use occp_ws::state::{AppState, START_TIME};
 
 async fn run() -> Result<()> {
     async fn time_now() -> DateTime<Utc> {

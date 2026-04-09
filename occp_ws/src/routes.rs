@@ -5,12 +5,13 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::TypedHeader;
+use common::state::{AppState, START_TIME};
+use db::Db;
 
 use crate::handlers::handle_socket;
-use crate::state::{AppState, START_TIME};
 
 pub async fn upgrade_to_ws(
-    State(state): State<AppState>,
+    State(state): State<AppState<Db>>,
     ws: WebSocketUpgrade,
     Path(station_id): Path<String>,
     _user_agent: Option<TypedHeader<headers::UserAgent>>,

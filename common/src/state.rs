@@ -1,18 +1,26 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use common::{ServerConfig, allowed_serial_numbers};
-use db::Db;
 use tokio::sync::OnceCell;
 use tracing::warn;
+
+use crate::{ServerConfig, allowed_serial_numbers};
 
 pub static START_TIME: OnceCell<DateTime<Utc>> = OnceCell::const_new();
 pub static ALLOWED_SERIAL_NUMBERS: OnceCell<Vec<String>> = OnceCell::const_new();
 
-#[derive(Clone)]
-pub struct AppState {
-    pub db: Arc<Db>,
+pub struct AppState<DB> {
+    pub db: Arc<DB>,
     pub config: Arc<ServerConfig>,
+}
+
+impl<DB> Clone for AppState<DB> {
+    fn clone(&self) -> Self {
+        Self {
+            db: Arc::clone(&self.db),
+            config: Arc::clone(&self.config),
+        }
+    }
 }
 
 pub fn get_allowed_serial_numbers() -> Option<&'static Vec<String>> {

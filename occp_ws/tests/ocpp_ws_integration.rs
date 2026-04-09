@@ -9,10 +9,10 @@ use std::{
 use axum::{Router, routing::get};
 use chrono::Utc;
 use common::ServerConfig;
+use common::state::{AppState, START_TIME};
 use db::{BootNotification, Db, Station, StationConnectionState, boot_notification, station};
 use futures::{SinkExt, StreamExt};
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
-use occp_ws::state::{AppState, START_TIME};
 use occp_ws::types::*;
 use rust_ocpp::v1_6::messages::boot_notification::BootNotificationRequest;
 use rust_ocpp::v1_6::messages::heart_beat::HeartbeatRequest;

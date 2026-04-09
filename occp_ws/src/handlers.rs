@@ -2,6 +2,8 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use axum::extract::ws::{Message as AxumWSMessage, WebSocket};
 use chrono::Utc;
+use common::ServerConfig;
+use common::state::load_allowed_serial_numbers;
 use db::Db;
 use futures::{SinkExt, StreamExt};
 use rust_ocpp::v1_6::messages::{
@@ -17,9 +19,7 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 
-use crate::state::load_allowed_serial_numbers;
 use crate::types::*;
-use common::ServerConfig;
 
 // OCPP 1.6 JSON framing message type identifiers
 const CALL_MESSAGE_TYPE_ID: OcppMessageTypeId = 2;
