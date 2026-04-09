@@ -109,4 +109,21 @@ impl Db {
 
         Ok(())
     }
+
+    // On cold starts, the connection status field has no meaning
+    // So we need to think all stations as offline
+    // And this helper is for this
+    pub async fn kill_all(&self) -> Result<(), DbErr> {
+        for st in Station::find()
+            .filter(station::Column::ConnectionState.eq(StationConnectionState::Online))
+            .all(&self.conn)
+            .await?
+        {
+            let mut active_station: station::ActiveModel = st.into();
+            active_station.connection_state = Set(StationConnectionState::Offline);
+            active_station.update(&self.conn).await?;
+        }
+
+        Ok(())
+    }
 }

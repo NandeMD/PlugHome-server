@@ -34,6 +34,9 @@ async fn run() -> Result<()> {
         .with_context(|| format!("Failed to bind to address: {}", config.socket_addr()))?;
     info!("Server listening on {}", config.socket_addr());
 
+    // Mark all stations offline in cold start
+    db.kill_all().await?;
+
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))
         .route("/", get(healthcheck_route))
