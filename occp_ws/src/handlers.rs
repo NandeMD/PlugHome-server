@@ -42,6 +42,14 @@ pub async fn handle_socket(
         "New WebSocket connection for station {station_id}: {addr}"
     );
 
+    if let Err(err) = db.mark_station_online_if_registered(&station_id).await {
+        warn!(
+            addr = %addr,
+            station_id = %station_id,
+            "Failed to mark station online at connection start: {err}"
+        );
+    }
+
     let (mut ws_tx, mut ws_rx) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<AxumWSMessage>(64);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();

@@ -110,3 +110,40 @@ async fn mark_station_offline_updates_existing_station() {
 
     assert_eq!(station.connection_state, StationConnectionState::Offline);
 }
+
+#[tokio::test]
+async fn mark_station_online_if_registered_updates_existing_station() {
+    let db = setup_test_db().await;
+
+    db.record_boot_notification("station-123").await.unwrap();
+    db.mark_station_offline("station-123").await.unwrap();
+    db.mark_station_online_if_registered("station-123")
+        .await
+        .unwrap();
+
+    let station = Station::find()
+        .filter(station::Column::StationId.eq("station-123"))
+        .one(&db.conn)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(station.connection_state, StationConnectionState::Online);
+}
+
+#[tokio::test]
+async fn mark_station_online_if_registered_does_not_create_station() {
+    let db = setup_test_db().await;
+
+    db.mark_station_online_if_registered("missing-station")
+        .await
+        .unwrap();
+
+    let station = Station::find()
+        .filter(station::Column::StationId.eq("missing-station"))
+        .one(&db.conn)
+        .await
+        .unwrap();
+
+    assert!(station.is_none());
+}

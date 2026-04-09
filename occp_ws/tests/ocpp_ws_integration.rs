@@ -9,7 +9,7 @@ use std::{
 use axum::{Router, routing::get};
 use chrono::Utc;
 use common::ServerConfig;
-use db::{BootNotification, Db, Station, boot_notification, station};
+use db::{BootNotification, Db, Station, StationConnectionState, boot_notification, station};
 use futures::{SinkExt, StreamExt};
 use occp_ws::routes::{healthcheck_route, upgrade_to_ws};
 use occp_ws::state::{AppState, START_TIME};
@@ -18,6 +18,7 @@ use rust_ocpp::v1_6::messages::boot_notification::BootNotificationRequest;
 use rust_ocpp::v1_6::messages::heart_beat::HeartbeatRequest;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle, time::timeout};
+use tokio::time::sleep;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use tracing_subscriber::EnvFilter;
 
@@ -97,6 +98,36 @@ async fn recv_text_within(
                 )));
             }
         }
+    }
+}
+
+async fn wait_for_station_state(
+    db: &Db,
+    station_id: &str,
+    expected: StationConnectionState,
+) -> Result<(), Box<dyn Error>> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+
+    loop {
+        let station = Station::find()
+            .filter(station::Column::StationId.eq(station_id))
+            .one(&db.conn)
+            .await?;
+
+        if let Some(station) = station {
+            if station.connection_state == expected {
+                return Ok(());
+            }
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            return Err(Box::new(io::Error::new(
+                ErrorKind::TimedOut,
+                format!("station {station_id} did not reach expected state"),
+            )));
+        }
+
+        sleep(Duration::from_millis(10)).await;
     }
 }
 
@@ -302,6 +333,35 @@ async fn accepts_boot_notification_call_over_websocket() -> Result<(), Box<dyn E
         .await?;
 
     assert_eq!(boot_notifications.len(), 1);
+
+    socket.close(None).await?;
+
+    shutdown.send(()).ok();
+    server.await.expect("server task panicked");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn marks_registered_station_online_when_websocket_connects() -> Result<(), Box<dyn Error>> {
+    let (addr, db, shutdown, server) = start_test_server().await;
+
+    db.record_boot_notification("station-online-on-connect").await?;
+    db.mark_station_offline("station-online-on-connect").await?;
+
+    let url = format!("ws://{addr}/station-online-on-connect");
+    let (mut socket, _) = connect_async(&url).await?;
+
+    wait_for_station_state(&db, "station-online-on-connect", StationConnectionState::Online)
+        .await?;
+
+    let station = Station::find()
+        .filter(station::Column::StationId.eq("station-online-on-connect"))
+        .one(&db.conn)
+        .await?
+        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "station missing after connect"))?;
+
+    assert_eq!(station.connection_state, StationConnectionState::Online);
 
     socket.close(None).await?;
 
