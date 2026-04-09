@@ -7,6 +7,8 @@ use tokio::net;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+mod sweeper;
+
 use common::{ServerConfig, init_tracing, load_env};
 use db::Db;
 
@@ -36,6 +38,9 @@ async fn run() -> Result<()> {
 
     // Mark all stations offline in cold start
     db.kill_all().await?;
+
+    // This will check last seen for each station, then marks them offline if necessary
+    let _sweep_job = sweeper::start_sweeper(Arc::clone(&db));
 
     let router = Router::new()
         .route("/:station_id", get(upgrade_to_ws))

@@ -1,7 +1,7 @@
 pub mod entities;
 pub mod migration;
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use common::ServerConfig;
 pub use entities::boot_notification::{
     self, Entity as BootNotification, Model as BootNotificationModel,
@@ -16,6 +16,8 @@ use sea_orm::{
 };
 
 pub struct Db {
+    station_timeout: u32,
+
     pub conn: DatabaseConnection,
 }
 
@@ -26,7 +28,10 @@ impl Db {
         // Migrate
         run_migrations(&conn).await?;
 
-        Ok(Db { conn })
+        Ok(Db {
+            conn,
+            station_timeout: config.station_timeout,
+        })
     }
 
     pub async fn record_boot_notification(&self, station_id: &str) -> Result<(), DbErr> {
@@ -125,5 +130,28 @@ impl Db {
         }
 
         Ok(())
+    }
+
+    /// Returns sweeped station ids if Ok
+    pub async fn sweep(&self) -> Result<Vec<String>, DbErr> {
+        let max_retention = self.station_timeout * 2 + 30;
+        let cutoff = Utc::now() - Duration::seconds(max_retention as i64);
+        let mut sweeped_station_ids: Vec<String> = Vec::new();
+
+        for st in Station::find()
+            .filter(station::Column::LastSeen.lte(cutoff))
+            .all(&self.conn)
+            .await?
+        {
+            let station_id = st.station_id.clone();
+
+            let mut active_station: station::ActiveModel = st.into();
+            active_station.connection_state = Set(StationConnectionState::Offline);
+            active_station.update(&self.conn).await?;
+
+            sweeped_station_ids.push(station_id);
+        }
+
+        Ok(sweeped_station_ids)
     }
 }
