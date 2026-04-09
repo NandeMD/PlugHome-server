@@ -141,7 +141,7 @@ pub async fn handle_socket(
     let _ = shutdown_tx.send(());
     let _ = writer.await;
 
-    if let Err(err) = db.mark_station_offline(&station_id).await {
+    if let Err(err) = db.mark_station_dead(&station_id).await {
         warn!(
             addr = %addr,
             station_id = %station_id,

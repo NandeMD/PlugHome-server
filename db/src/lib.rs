@@ -67,7 +67,7 @@ impl Db {
         txn.commit().await
     }
 
-    pub async fn mark_station_offline(&self, station_id: &str) -> Result<(), DbErr> {
+    pub async fn mark_station_dead(&self, station_id: &str) -> Result<(), DbErr> {
         if let Some(station) = Station::find()
             .filter(station::Column::StationId.eq(station_id))
             .one(&self.conn)

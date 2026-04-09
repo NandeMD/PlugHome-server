@@ -352,7 +352,7 @@ async fn marks_registered_station_online_when_websocket_connects() -> Result<(),
 
     db.record_boot_notification("station-online-on-connect")
         .await?;
-    db.mark_station_offline("station-online-on-connect").await?;
+    db.mark_station_dead("station-online-on-connect").await?;
 
     let url = format!("ws://{addr}/station-online-on-connect");
     let (mut socket, _) = connect_async(&url).await?;
