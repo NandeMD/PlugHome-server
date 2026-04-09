@@ -94,4 +94,19 @@ impl Db {
 
         Ok(())
     }
+
+    // Updates `last_seen` field. Sorry for the bad humor.
+    pub async fn still_not_dead(&self, station_id: &str) -> Result<(), DbErr> {
+        if let Some(station) = Station::find()
+            .filter(station::Column::StationId.eq(station_id))
+            .one(&self.conn)
+            .await?
+        {
+            let mut active_station: station::ActiveModel = station.into();
+            active_station.last_seen = Set(Utc::now());
+            active_station.update(&self.conn).await?;
+        }
+
+        Ok(())
+    }
 }

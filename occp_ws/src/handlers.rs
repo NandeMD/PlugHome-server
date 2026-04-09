@@ -30,12 +30,7 @@ enum OcppOutcome {
     Close(Vec<AxumWSMessage>),
 }
 
-pub async fn handle_socket(
-    socket: WebSocket,
-    addr: SocketAddr,
-    station_id: String,
-    db: Arc<Db>,
-) {
+pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, station_id: String, db: Arc<Db>) {
     info!(
         addr = %addr,
         station_id = %station_id,
@@ -68,6 +63,12 @@ pub async fn handle_socket(
                         break;
                     }
                 };
+
+                // Update last seen on every message successfully received from ws
+                // TODO: I need a better way to handle db write error for this.
+                if let Err(e) = db.still_not_dead(&station_id).await {
+                    error!("An error occured while declaring station `not dead`: {e}");
+                }
 
                 match msg {
                     AxumWSMessage::Text(text) => {
