@@ -122,6 +122,14 @@ pub async fn handle_socket(
     let _ = shutdown_tx.send(());
     let _ = writer.await;
 
+    if let Err(err) = db.mark_station_offline(&station_id).await {
+        warn!(
+            addr = %addr,
+            station_id = %station_id,
+            "Failed to mark station offline: {err}"
+        );
+    }
+
     info!(
         addr = %addr,
         station_id = %station_id,
