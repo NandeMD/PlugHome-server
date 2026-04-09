@@ -46,14 +46,14 @@ impl Db {
             Some(station) => {
                 let mut active_station: station::ActiveModel = station.into();
                 active_station.connection_state = Set(StationConnectionState::Online);
-                active_station.last_seen = Set(now.clone());
+                active_station.last_seen = Set(now);
                 active_station.update(&txn).await?
             }
             None => {
                 station::ActiveModel {
                     station_id: Set(station_id.to_owned()),
                     connection_state: Set(StationConnectionState::Online),
-                    last_seen: Set(now.clone()),
+                    last_seen: Set(now),
                     ..Default::default()
                 }
                 .insert(&txn)
